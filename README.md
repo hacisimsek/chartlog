@@ -6,6 +6,7 @@ Apple App Store üst listelerini her gün arşivleyen, ücretsiz ve giriş gerek
 - **Sıklık:** Günde bir kez (UTC 03:17), UTC 15:17'de yedek çalışma.
 - **Görünümler:** Ülke bazında bugün, yükselenler, yeni girenler, haftalık ve aylık özet. Ayrıca bütün ülkeleri birleştiren global liste ve uygulama başına 90 günlük geçmiş.
 - **Canlı site:** https://hacisimsek.github.io/chartlog/
+- **Dil:** Türkçe ve İngilizce. Tarayıcı dili Türkçe ise Türkçe, değilse İngilizce açılır; sağ üstteki TR/EN düğmesiyle değişir (seçim tarayıcıda saklanır). Doğrudan link için `?lang=en` veya `?lang=tr`. Metinler `site/common.js` içindeki `TR` ve `EN` nesnelerinde.
 
 ## Nasıl çalışır
 

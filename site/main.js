@@ -1,5 +1,5 @@
 import {
-  genreName, announce,
+  genreName, announce, compareNames,
   STRINGS as S, el, svgEl, setState, fetchJSON, countryName, appHref, iconEl,
   fmtDate, fmtStamp, fmtNum, fmtAvg, initShell, drawSegments,
 } from './common.js';
@@ -193,7 +193,7 @@ function setupHeader() {
 
   const countries = meta.countries
     .map(cc => [cc, countryName(cc)])
-    .sort((a, b) => a[1].localeCompare(b[1], 'tr'));
+    .sort((a, b) => compareNames(a[1], b[1]));
   scopeSel.append(
     el('option', { value: 'global' }, S.global),
     ...countries.map(([cc, name]) => el('option', { value: cc }, `${name} (${cc.toUpperCase()})`)),
