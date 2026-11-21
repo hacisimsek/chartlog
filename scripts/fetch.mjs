@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 // free/paid: Apple's RSS v2 apps feed (it has no games). gfree/gpaid: games, from the legacy iTunes RSS
 // filtered to genre 6014 (measured 2026-11-21: all 330 charts on the first try, ~1 s, no hangs).
 export const KINDS = { free: 'top-free', paid: 'top-paid', gfree: 'topfreeapplications', gpaid: 'toppaidapplications' };
+const FEEDS = { apps: ['free', 'paid'], games: ['gfree', 'gpaid'] };
 const DELAYS = [500, 1000, 2000, 3000, 5000];
 // Normal responses take 1-3 s, but ~35-40% of requests hang at random (measured 2026-11-21,
 // independent of concurrency), so fail fast and retry: 6 attempts leave ~0.4% failing per chart.
@@ -217,19 +218,34 @@ export async function run({
     results[key] = await fetchChart(cc, kind, { fetch, sleep });
   });
 
-  const ok = plan.filter((key) => results[key]).length;
+  // The 90% rule is applied per feed (apps: v2 feed, games: legacy iTunes RSS), so one feed failing
+  // does not throw away the other's day. It counts the whole day after merging, not this run's plan:
+  // a re-run that only retries a few still-failing charts must not discard a 99% complete feed.
+  // A --force run must also refresh 90% of the feed itself, or old charts would pass unrefreshed.
+  const bad = [];
+  const parts = [];
+  for (const [feed, feedKinds] of Object.entries(FEEDS)) {
+    const fk = kinds.filter((k) => feedKinds.includes(k));
+    if (!fk.length) continue;
+    const mine = plan.filter((key) => fk.includes(key.split('/')[1]));
+    const ok = mine.filter((key) => results[key]).length;
+    const day = mergeRaw(existing, date, '', Object.fromEntries(mine.map((key) => [key, results[key]])));
+    const all = planCharts(countries, null, true, fk);
+    const have = all.filter((key) => { const [cc, kind] = key.split('/'); return day.charts[cc]?.[kind]; }).length;
+    const below = have < all.length * 0.9 || (force && mine.length && ok < mine.length * 0.9);
+    parts.push(`${feed} ok ${ok}/${mine.length} day ${have}/${all.length}${below ? ' BELOW 90%, not saved' : ''}`);
+    if (below) {
+      bad.push(feed);
+      for (const key of mine) results[key] = null; // keep the saved value (if any); listed in failed
+    }
+  }
   const failedNow = plan.filter((key) => !results[key]);
-  const raw = mergeRaw(existing, date, now().toISOString(), results);
-  // The 90% rule applies to the whole day after merging, not to this run's plan: a re-run that only
-  // retries a few still-failing charts must not throw away a day that is already 99% complete.
-  const all = planCharts(countries, null, true, kinds);
-  const have = all.filter((key) => { const [cc, kind] = key.split('/'); return raw.charts[cc]?.[kind]; }).length;
-  const summary = `${date} ok ${ok}/${plan.length} failed: ${failedNow.join(',') || '-'} day ${have}/${all.length} ${((now() - start) / 1000).toFixed(1)}s`;
-  // A --force run must also refresh 90% itself, or old charts would pass the day rule unrefreshed.
-  if (have < all.length * 0.9 || (force && ok < plan.length * 0.9)) {
-    logErr(`${summary} (below 90%, nothing written)`);
+  const summary = `${date} ${parts.join(' | ')} | failed: ${failedNow.length > 12 ? `${failedNow.length} charts` : failedNow.join(',') || '-'} ${((now() - start) / 1000).toFixed(1)}s`;
+  if (bad.length === parts.length) {
+    logErr(`${summary} (nothing written)`);
     return 1;
   }
+  const raw = mergeRaw(existing, date, now().toISOString(), results);
 
   const apps = updateApps((await readJson(appsFile)) || {}, results, !existing || force);
   const { ratings, line } = await lookup(raw, apps);
@@ -237,8 +253,9 @@ export async function run({
   await writeJson(appsFile, apps);
   if (Object.keys(ratings).length) await writeJson(ratingsFile, ratings);
   await writeJson(rawFile, raw);
-  log(`${summary} | ${line}`);
-  return 0;
+  // Exit 1 when a feed was below 90%: the workflow still commits and deploys what was saved, then fails the run.
+  (bad.length ? logErr : log)(`${summary} | ${line}`);
+  return bad.length ? 1 : 0;
 }
 
 async function main() {

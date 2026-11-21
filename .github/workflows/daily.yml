@@ -30,6 +30,8 @@ jobs:
     concurrency:
       group: fetch
       cancel-in-progress: false
+    outputs:
+      partial: ${{ steps.fetch.outcome == 'failure' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,16 +43,20 @@ jobs:
 
       - run: npm test
 
-      # The feed hangs ~35-40% of requests at random. fetch.mjs writes the day when >= 90% of all
-      # charts are in (after merging with what is already saved; a --force run must also get 90%
-      # fresh) and lists the rest as failed. If the first pass fails it is retried once; the last
-      # pass, a minute later, only retries charts still missing. If the day stays below 90%, the
-      # job fails, nothing is committed or deployed, and the old site stays up.
+      # The apps feed hangs ~35-40% of requests at random. fetch.mjs judges each feed (apps, games)
+      # on its own: a feed with >= 90% of its charts (after merging with what is saved; a --force run
+      # must also get 90% fresh) is saved, the rest is listed as failed, and it exits 1 if any feed was
+      # below 90%. A failing first pass is retried once; the last pass, a minute later, only retries
+      # charts still missing. continue-on-error: whatever was saved is still committed and deployed;
+      # the deploy job then fails the run so GitHub emails the owner.
       - name: Fetch charts
+        id: fetch
+        continue-on-error: true
         env:
           FORCE: ${{ inputs.force && '--force' || '' }}
         run: |
-          npm run fetch -- $FORCE || (sleep 60 && npm run fetch -- $FORCE)
+          # || true: the last pass must run even if both earlier passes exit 1; its exit code decides.
+          npm run fetch -- $FORCE || (sleep 60 && npm run fetch -- $FORCE) || true
           sleep 60
           npm run fetch
 
@@ -102,3 +108,9 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Fail if a feed was below 90%
+        if: needs.fetch.outputs.partial == 'true'
+        run: |
+          echo "::error::A feed was below 90% today (see the fetch job log). Saved data was committed and deployed."
+          exit 1

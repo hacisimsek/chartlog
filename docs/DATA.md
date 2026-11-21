@@ -31,7 +31,10 @@ https://itunes.apple.com/{cc}/rss/{topfreeapplications|toppaidapplications}/limi
 - For games, `g` in `apps.json` is the first subgenre id (`7001` Action … `7019` Word) from the lookup's `genreIds`;
   the feed's plain `6014` never overwrites a subgenre.
 
-The 90% rule counts all four kinds (165 × 4 = 660 charts).
+**The 90% rule is per feed.** Apps (`free`+`paid`, 330 charts) and games (`gfree`+`gpaid`, 330 charts) are judged
+separately on the merged day: a feed with at least 90% of its charts is saved, a feed below 90% keeps whatever was already
+saved for it (its new charts are dropped and listed in `failed`). `fetch.mjs` exits 1 if any feed was below 90% and writes
+nothing only when every feed is. The workflow still commits and deploys what was saved, then fails the run (email).
 
 ## Committed data (`data/`)
 

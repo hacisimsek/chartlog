@@ -365,3 +365,35 @@ test('lookupApps: an app looked up now without a US rating loses its old rating 
   assert.deepEqual(apps[1], { g: '6007' }); // not returned
   assert.deepEqual(apps[2], { g: '6007' }); // returned without userRatingCount
 });
+
+test('feeds are judged separately: games feed down -> apps still saved, exit 1; next pass fills games', async () => {
+  const dir = await tmp();
+  const countries = ['de', 'fr', 'tr', 'us'];
+  const routes = {};
+  for (const cc of countries) for (const kind of ['free', 'paid']) routes[`${cc}/${kind}`] = ok(TR);
+  const all4 = { ...base, kinds: ['free', 'paid', 'gfree', 'gpaid'], countries, dataDir: dir };
+  const games = (up) => {
+    const apps = mockFetch(routes).fetch;
+    return async (url, o) => (url.includes('/rss/')
+      ? (up ? { status: 200, text: async () => legacyFeed([legacyEntry(7), legacyEntry(8)]) } : { status: 503, text: async () => '' })
+      : apps(url, o));
+  };
+  const errs = [];
+  assert.equal(await run({ ...all4, fetch: games(false), logErr: (s) => errs.push(s) }), 1);
+  let raw = await readJson(rawPath(dir));
+  assert.deepEqual(Object.keys(raw.charts.tr), ['free', 'paid']);
+  assert.equal(raw.failed.length, 8); // 4 countries x gfree/gpaid
+  assert.match(errs[0], /apps ok 8\/8 day 8\/8 \| games ok 0\/8 day 0\/8 BELOW 90%, not saved/);
+
+  assert.equal(await run({ ...all4, fetch: games(true) }), 0);
+  raw = await readJson(rawPath(dir));
+  assert.deepEqual(raw.failed, []);
+  assert.deepEqual(raw.charts.tr.gfree, ['7', '8']);
+});
+
+test('both feeds below 90% -> nothing written, exit 1', async () => {
+  const dir = await tmp();
+  const fetch = async () => ({ status: 500, text: async () => '' });
+  assert.equal(await run({ ...base, kinds: ['free', 'paid', 'gfree', 'gpaid'], countries: ['tr'], dataDir: dir, fetch }), 1);
+  assert.deepEqual(await listFiles(dir), []);
+});

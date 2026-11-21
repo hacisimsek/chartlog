@@ -24,7 +24,7 @@ site/data/   (özetler; repoya girmez)
 GitHub Pages: hacisimsek.github.io/chartlog/
 ```
 
-- Apple'ın feed'i isteklerin %35-40'ını rastgele bekletiyor. Bu yüzden her liste 5 sn zaman aşımıyla 6 kez denenir, iş 1 dakika arayla ikinci bir tur daha atar ve bu tur sadece eksik kalan listeleri dener. Günün listelerinin en az %90'ı geldiyse gün kaydedilir, gelmeyenler `failed` alanında listelenir. %90'ın altında kalırsa hiçbir şey yazılmaz, iş hata verir (GitHub sahibine e-posta atar) ve eski site yayında kalır.
+- Apple'ın feed'i isteklerin %35-40'ını rastgele bekletiyor. Bu yüzden her liste 5 sn zaman aşımıyla 6 kez denenir, iş 1 dakika arayla ikinci bir tur daha atar ve bu tur sadece eksik kalan listeleri dener. Uygulama ve oyun feed'leri ayrı değerlendirilir: bir feed'in listelerinin en az %90'ı geldiyse o feed kaydedilir, gelmeyenler `failed` alanında listelenir. Bir feed %90'ın altında kalırsa sadece o feed'in yeni verisi atılır; diğeri yine commit edilip yayınlanır, ama çalıştırma hata verir ve GitHub sahibine e-posta atar. İki feed de çökerse hiçbir şey yazılmaz ve eski site yayında kalır.
 - Aynı gün tekrar çalışınca sadece eksik veya başarısız listeler tekrar denenir. Yedek çalışma bu yüzden eksikleri tamamlar. Gün tamamsa hiçbir şey yapmaz.
 - Elle tetikleme: Actions sekmesi → `daily` → *Run workflow*. `force` seçilirse bugünün bütün listeleri yeniden çekilir.
 - Kod `main`'e push edilince site yeniden build edilir ve yayınlanır (veri çekilmez).
