@@ -27,9 +27,9 @@
     --fg: #e6e6e3;
     --muted: #a2a3aa;
     --quiet: #8b8c93;
-    --line: #26272b;
-    --rule: #3a3b40;
-    --row: #1f2023;
+    --line: #303137;
+    --rule: #46474d;
+    --row: #222327;
     --accent: #8db1ff;
     --accent-fg: #0b1020;
     --up: #5cc98e;
@@ -52,7 +52,12 @@ body {
   font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-variant-numeric: tabular-nums;
 }
-a { color: var(--accent); }
+a {
+  color: var(--accent);
+  text-decoration-thickness: 1px; text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+}
+a:hover { text-decoration-color: currentColor; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .sr {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
@@ -84,26 +89,35 @@ button.plain {
 }
 button.plain[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); }
 
-main { padding: 12px 16px 24px; max-width: 1180px; }
+main { margin: 0 auto; padding: 12px 16px 24px; max-width: 1180px; }
+/* Borders run full width; the content inside lines up with the centred main column (no change below 1212px). */
+.top, footer { padding-inline: max(16px, calc((100% - 1180px) / 2 + 16px)); }
 .state, .note, .notice { margin: 12px 0; }
 .state { color: var(--muted); }
 .error { color: var(--down); }
 .note, .hint { color: var(--muted); font-size: 12.5px; }
-.hint { margin: 4px 0 10px; }
+.hint { margin: 4px 0 10px; font-size: 11.5px; color: var(--quiet); }
 .notice { padding: 8px 10px; border-radius: 3px; background: var(--warn-bg); color: var(--warn-fg); }
 
 /* radar: signal bands stacked vertically, up to five apps across inside each */
 .radar-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
-.intro h1 { margin: 0; font: 600 13px/1.4 var(--mono); }
-.intro p { margin: 2px 0 14px; color: var(--muted); font-size: 12.5px; }
-.radar-head h2 { margin: 0; font: 700 20px/1.25 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; text-transform: none; letter-spacing: -.01em; color: var(--fg); }
+.radar { padding-bottom: 24px; border-bottom: 1px solid var(--rule); }
+/* type scale 20 / 15 / 13 / 11: page h1, Radar h2, signal titles, labels */
+.intro h1 { margin: 0; font: 700 20px/1.25 var(--mono); letter-spacing: -.01em; }
+.intro p { margin: 4px 0 20px; color: var(--muted); font-size: 13px; }
+.radar-head h2 { margin: 0; font: 700 15px/1.25 var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--fg); }
 .radar-ctx { font-size: 14px; font-weight: 400; color: var(--muted); }
-.lede { margin: 2px 0 12px; color: var(--muted); }
-#signals { display: flex; flex-direction: column; gap: 10px; }
+.lede { margin: 2px 0 10px; color: var(--muted); }
+#signals { display: flex; flex-direction: column; gap: 8px; }
 .signal { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 10px 14px; }
 .signal header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; margin-bottom: 8px; }
-.signal h2 { margin: 0; font-size: 15px; display: flex; align-items: baseline; gap: 8px; }
+.signal h2 { margin: 0; font: 600 13px var(--mono); letter-spacing: .06em; color: var(--fg); display: flex; align-items: baseline; gap: 8px; }
 .signal .state { margin: 0; }
+/* still collecting history: one quiet dashed line instead of a full card */
+.signal.pending { padding: 6px 14px; border-style: dashed; border-color: var(--rule); background: transparent; }
+.signal.pending header { margin: 0; }
+.signal.pending .why { display: none; }
+.wait { margin-left: auto; font: 12px var(--mono); color: var(--quiet); }
 .sig-n { font: 600 12px var(--mono); color: var(--quiet); }
 .why { margin: 0; font-size: 12.5px; color: var(--muted); }
 .sig-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
@@ -123,9 +137,9 @@ main { padding: 12px 16px 24px; max-width: 1180px; }
 .scatter text { fill: var(--muted); font-size: 11px; }
 .scatter .grid { stroke: var(--line); }
 .scatter .ref { stroke: var(--quiet); stroke-dasharray: 3 3; }
-.scatter .quad { fill: var(--quad); }
+.scatter .quad { fill: var(--quad); opacity: .6; }
 .scatter .quad-label { fill: var(--hot); font-weight: 600; }
-.scatter .pt { fill: var(--accent); fill-opacity: .85; stroke: var(--surface); stroke-width: 1; }
+.scatter .pt { fill: var(--accent); fill-opacity: .7; stroke: var(--surface); stroke-width: 1; }
 .scatter .pt.hot { fill: var(--hot); fill-opacity: .9; }
 .scatter a:hover .pt { fill-opacity: 1; stroke: var(--fg); }
 .scatter-list { margin-top: 6px; font-size: 13px; }
@@ -133,7 +147,7 @@ main { padding: 12px 16px 24px; max-width: 1180px; }
 .low { color: var(--hot); font-weight: 600; }
 
 /* view tabs + table */
-.tabs { display: flex; gap: 2px; margin-top: 20px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs { display: flex; gap: 2px; margin-top: 24px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .tabs button { padding: 8px 10px; border-bottom: 2px solid transparent; white-space: nowrap; color: var(--muted); }
 .tabs button[aria-pressed="true"] { color: var(--fg); border-bottom-color: var(--fg); font-weight: 600; }
 .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin: 12px 0 0; font-size: 13px; }
@@ -144,6 +158,7 @@ main { padding: 12px 16px 24px; max-width: 1180px; }
 /* The index table has no scroll wrapper so its header can stick to the viewport; columns drop by tier instead.
    .table-wrap (app page) scrolls sideways. */
 .table-wrap { overflow-x: auto; }
+.table-wrap.narrow { max-width: 720px; }
 table.chart { width: 100%; border-collapse: separate; border-spacing: 0; }
 .chart th {
   position: sticky; top: 0; z-index: 1; background: var(--bg);
@@ -189,7 +204,7 @@ svg.spark circle, .series circle { fill: currentColor; }
 .app-head p { margin: 2px 0 4px; }
 h2 { font: 600 12px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 24px 0 8px; }
 .controls { margin: 0 0 8px; }
-.linechart { width: 100%; color: var(--accent); }
+.linechart { width: 100%; max-width: 760px; color: var(--accent); }
 .line { display: block; }
 .line .grid { stroke: var(--line); }
 .line text { fill: var(--muted); font-size: 11px; }
@@ -199,10 +214,20 @@ h2 { font: 600 12px var(--mono); text-transform: uppercase; letter-spacing: .06e
 .prose { max-width: 680px; line-height: 1.6; }
 .prose h1 { font-size: 22px; }
 .prose h2 { margin-top: 20px; }
+.prose.wide { max-width: 1180px; }
+.prose table { line-height: 1.4; }
 
-footer { padding: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+footer { padding-block: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 footer p { margin: 4px 0; }
+footer a { color: var(--muted); text-decoration-color: currentColor; }
+footer a:hover { color: var(--accent); }
 
+@media (min-width: 861px) {
+  #signals { display: grid; grid-template-columns: 1fr 1fr; }
+  #signals > :not(.pending) { grid-column: 1 / -1; }
+  /* a pending row with no pending neighbour would leave an empty half-cell */
+  #signals > .pending:not(.pending + .pending):not(:has(+ .pending)) { grid-column: 1 / -1; }
+}
 @media (max-width: 900px) {
   .t3 { display: none; }
 }
@@ -218,4 +243,26 @@ footer p { margin: 4px 0; }
   .updated { margin-left: 0; order: 9; width: 100%; }
   .chart td, .chart th { padding-left: 4px; padding-right: 4px; }
   .filters .count { margin-left: 0; }
+  .brand { order: -2; }
+  #scope { flex: 1 1 160px; min-width: 0; }
+  .top { padding: 8px 16px; gap: 6px 8px; }
+  .updated { font-size: 11.5px; }
+  .tabs {
+    scrollbar-width: none; scroll-padding-inline: 16px; padding-right: 28px; /* lets the last tab scroll clear of the fade */
+    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+}
+/* touch: bigger targets; mouse users keep the dense look */
+@media (pointer: coarse) {
+  select { min-height: 40px; }
+  .seg button { min-height: 40px; padding: 0 14px; }
+  button.plain { min-height: 36px; padding: 0 10px; }
+  .filters input { width: 18px; height: 18px; }
+  .tabs button { min-height: 44px; }
+}
+/* keep Apps|Games, Free|Paid and Hide icons on one row at 375px (English) */
+@media (pointer: coarse) and (max-width: 640px) {
+  .seg button { padding: 0 10px; }
+  button.plain { padding: 0 8px; }
 }

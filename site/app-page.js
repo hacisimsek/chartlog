@@ -28,7 +28,7 @@ function recentBest(ranks) {
 
 function lineChart(dates, ranks, width) {
   const W = Math.max(280, Math.round(width) || 600), H = 220, L = 34, R = 12, T = 10, B = 26;
-  const x = i => L + (i * (W - L - R)) / Math.max(1, dates.length - 1);
+  const x = dates.length === 1 ? () => (L + W - R) / 2 : i => L + (i * (W - L - R)) / (dates.length - 1);
   const y = r => T + ((r - 1) * (H - T - B)) / 99; // rank 1 at top, 100 at bottom
   const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: 'line', 'aria-hidden': 'true', focusable: 'false' });
   for (const r of [1, 25, 50, 75, 100]) {
@@ -37,20 +37,20 @@ function lineChart(dates, ranks, width) {
   }
   const last = dates.length - 1;
   for (const i of new Set([0, Math.floor(last / 2), last])) {
-    const anchor = i === 0 ? 'start' : i === last ? 'end' : 'middle';
+    const anchor = last === 0 ? 'middle' : i === 0 ? 'start' : i === last ? 'end' : 'middle';
     svg.append(svgEl('text', { x: x(i), y: H - 6, 'text-anchor': anchor }, fmtShort(dates[i])));
   }
   const g = svgEl('g', { class: 'series' });
-  drawSegments(g, ranks, x, y, 2.5);
+  drawSegments(g, ranks, x, y, ranks.filter(v => v != null).length === 1 ? 4 : 2.5);
   svg.append(g);
   return svg;
 }
 
-function summary(s) {
+function summary(s, dates) {
   let best = null;
-  s.ranks.forEach((r, i) => { if (r != null && (best == null || r < best[0])) best = [r, app.dates[i]]; });
+  s.ranks.forEach((r, i) => { if (r != null && (best == null || r < best[0])) best = [r, dates[i]]; });
   const days = s.ranks.filter(r => r != null).length;
-  return S.chartSummary(s.label, app.dates.length, days, best?.[0] ?? '—', fmtDate(best?.[1]), s.ranks.at(-1));
+  return S.chartSummary(s.label, dates.length, days, best?.[0] ?? '—', fmtDate(best?.[1]), s.ranks.at(-1));
 }
 
 // "★ 4.8 (12,435,658 ratings · +41,210 in 30 days) · US App Store · Released May 18, 2023"; missing parts left out.
@@ -88,13 +88,17 @@ function render() {
     if (!series.some(s => s.key === selected)) selected = series[0].key;
     const sel = el('select', { id: 'series' }, ...series.map(s => el('option', { value: s.key }, s.label)));
     sel.value = selected;
+    // Crop to the days with data (at least the last 7), so a new app is not a dot in an empty 90-day grid.
+    const starts = series.map(x => x.ranks.findIndex(v => v != null)).filter(i => i >= 0);
+    const first = starts.length ? Math.max(0, Math.min(Math.min(...starts), dates.length - 7)) : 0;
     const box = el('div', { class: 'linechart' });
     const text = el('p', { class: 'summary' });
     redraw = () => {
       const s = series.find(x => x.key === sel.value);
       selected = s.key;
-      box.replaceChildren(lineChart(dates, s.ranks, box.clientWidth));
-      text.textContent = summary(s);
+      const ranks = s.ranks.slice(first);
+      box.replaceChildren(lineChart(dates.slice(first), ranks, box.clientWidth));
+      text.textContent = summary({ ...s, ranks }, dates.slice(first));
     };
     sel.addEventListener('change', redraw);
     nodes.push(el('section', {},
@@ -107,7 +111,7 @@ function render() {
   const lastDate = fmtDate(dates.at(-1));
   const section = el('section', {}, el('h2', {}, S.currentTitle(lastDate)));
   if (current.length) {
-    section.append(el('div', { class: 'table-wrap' }, el('table', { class: 'chart' },
+    section.append(el('div', { class: 'table-wrap narrow' }, el('table', { class: 'chart' },
       el('caption', { class: 'sr' }, S.currentTitle(lastDate)),
       el('thead', {}, el('tr', {},
         el('th', { scope: 'col' }, S.col.chart),

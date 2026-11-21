@@ -108,6 +108,9 @@ async function render() {
   for (const b of document.querySelectorAll('[data-type]')) b.setAttribute('aria-pressed', String(b.dataset.type === typeOf(route.kind)));
   for (const b of document.querySelectorAll('[data-price]')) b.setAttribute('aria-pressed', String(b.dataset.price === priceOf(route.kind)));
   for (const b of document.querySelectorAll('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === route.view));
+  // Keep the active tab in view on phones; scroll only the tab strip (scrollIntoView would also jump the page down).
+  const activeTab = document.querySelector('[data-view][aria-pressed="true"]');
+  if (activeTab) activeTab.parentElement.scrollLeft = activeTab.offsetLeft - activeTab.parentElement.offsetLeft - 16;
   const isDefault = route.scope === 'global' && route.kind === 'free' && route.view === 'month';
   document.title = isDefault && LANG === 'en' ? BASE_TITLE : `${countryName(route.scope)} · ${S[route.kind]} · ${S[route.view]} — ${S.titleTail}`;
   $('radar-ctx').textContent = `· ${countryName(route.scope)} · ${S[route.kind]}`;
@@ -195,11 +198,15 @@ function signals(chart, apps) {
   ];
   return defs.map((s, i) => {
     const top = s.list.slice(0, PER_SIGNAL);
-    return el('section', { class: `signal ${s.cls}`, 'aria-labelledby': `sig-${i}` },
+    // Still collecting history: a one-line dashed row with a days chip instead of a full card.
+    const pending = !top.length && meta.days < s.need;
+    return el('section', { class: `signal ${s.cls} ${pending ? 'pending' : ''}`, 'aria-labelledby': `sig-${i}` },
       el('header', {},
         el('h2', { id: `sig-${i}` }, el('span', { class: 'sig-n', 'aria-hidden': 'true' }, String(i + 1)), s.title),
-        el('p', { class: 'why' }, s.why, top.length ? ` (${S.shownOf(top.length, s.list.length)})` : null)),
-      top.length
+        el('p', { class: 'why' }, s.why, top.length ? ` (${S.shownOf(top.length, s.list.length)})` : null),
+        pending ? el('span', { class: 'wait', title: S.needDays(meta.days, s.need) }, `${meta.days}/${s.need}`,
+          el('span', { class: 'sr' }, ' ' + S.needDays(meta.days, s.need))) : null),
+      pending ? null : top.length
         ? el('ol', { class: 'sig-list' }, ...top.map(it => {
           const [num, unit] = s.big(it);
           return el('li', {}, el('span', { class: 'big' }, num, unit ? el('small', {}, ' ', unit) : null),
@@ -214,12 +221,12 @@ function scatter(items, apps) {
   const pts = items.filter(it => apps[it.id]?.r != null).map(it => ({ id: it.id, x: it.score, y: apps[it.id].r }));
   if (pts.length < 2) return null;
   const missing = items.length - pts.length;
-  const W = Math.max(300, Math.min(760, signalsBox.clientWidth || 760)), H = W < 500 ? 220 : 260;
-  const L = 34, R = 10, Tp = 12, B = 30;
+  const W = Math.max(300, (signalsBox.clientWidth || 790) - 30), H = W < 500 ? 220 : Math.min(340, Math.round(W * 0.28));
+  const L = 34, R = 10, Tp = 12, B = 34;
   const xs = pts.map(p => p.x).sort((a, b) => a - b);
   const xMax = xs.at(-1) || 1, xMed = xs[Math.floor(xs.length / 2)];
   const yMin = Math.min(3, Math.floor(Math.min(...pts.map(p => p.y)) * 2) / 2);
-  const x = v => L + (v / xMax) * (W - L - R);
+  const x = v => L + Math.sqrt(v / xMax) * (W - L - R); // sqrt so a few giants do not squash the rest into one blob
   const y = v => Tp + ((5 - v) / (5 - yMin)) * (H - Tp - B);
   const quad = p => p.x >= xMed && p.y < 4;
   const nQuad = pts.filter(quad).length;
@@ -232,13 +239,15 @@ function scatter(items, apps) {
   }
   svg.append(
     svgEl('line', { class: 'ref', x1: x(xMed), x2: x(xMed), y1: Tp, y2: H - B }),
-    svgEl('text', { x: W - R, y: H - 8, 'text-anchor': 'end' }, S.scatterX),
-    svgEl('text', { x: L, y: H - 8 }, '0'),
+    svgEl('text', { x: W - R, y: H - 4, 'text-anchor': 'end' }, S.scatterX),
+    svgEl('text', { x: L, y: H - B + 13 }, '0'),
+    svgEl('text', { x: x(xMax / 4), y: H - B + 13, 'text-anchor': 'middle' }, fmtCompact(xMax / 4)),
+    svgEl('text', { x: W - R, y: H - B + 13, 'text-anchor': 'end' }, fmtCompact(xMax)),
     svgEl('text', { class: 'quad-label', x: W - R - 4, y: H - B - 6, 'text-anchor': 'end' }, S.quadrant));
   // Point links are for pointer users; keyboard and screen reader users get the list below.
   for (const p of pts) {
     const a = svgEl('a', { href: appHref(p.id) || '#', tabindex: '-1' });
-    a.append(svgEl('circle', { class: quad(p) ? 'pt hot' : 'pt', cx: x(p.x).toFixed(1), cy: y(p.y).toFixed(1), r: 4.5 }),
+    a.append(svgEl('circle', { class: quad(p) ? 'pt hot' : 'pt', cx: x(p.x).toFixed(1), cy: y(p.y).toFixed(1), r: 3.5 }),
       svgEl('title', {}, `${apps[p.id].n || p.id} · ${fmtAvg(p.y)}★ · ${fmtNum(p.x)}`));
     svg.append(a);
   }

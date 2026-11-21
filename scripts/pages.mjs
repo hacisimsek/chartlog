@@ -65,7 +65,7 @@ const layout = ({ title, desc, canonical, head = '', body }) => `<!doctype html>
 ${head}</head>
 <body>
 <header class="top"><a class="brand" href="../">CHARTLOG</a></header>
-<main class="prose" style="max-width:1180px">
+<main class="prose wide">
 ${body}
 </main>
 <footer>
