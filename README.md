@@ -1,0 +1,83 @@
+# chartlog
+
+Apple App Store üst listelerini her gün arşivleyen, ücretsiz ve giriş gerektirmeyen bir site.
+
+- **Kapsam:** 165 ülke (`countries.json`), her ülke için ücretsiz ve ücretli ilk 100 listesi.
+- **Sıklık:** Günde bir kez (UTC 03:17), UTC 15:17'de yedek çalışma.
+- **Görünümler:** Ülke bazında bugün, yükselenler, yeni girenler, haftalık ve aylık özet. Ayrıca bütün ülkeleri birleştiren global liste ve uygulama başına 90 günlük geçmiş.
+- **Canlı site:** https://hacisimsek.github.io/chartlog/
+
+## Nasıl çalışır
+
+```
+GitHub Actions cron (günde 2 kez)
+  │  scripts/fetch.mjs: 165 ülke × 2 liste = 330 istek
+  ▼
+data/raw/YYYY/YYYY-MM-DD.json + data/apps.json   (repoya commit edilir)
+  │  scripts/build.mjs
+  ▼
+site/data/   (özetler; repoya girmez)
+  │  actions/deploy-pages
+  ▼
+GitHub Pages: hacisimsek.github.io/chartlog/
+```
+
+- Apple'ın feed'i isteklerin %35-40'ını rastgele bekletiyor. Bu yüzden her liste 5 sn zaman aşımıyla 6 kez denenir, iş 1 dakika arayla ikinci bir tur daha atar ve bu tur sadece eksik kalan listeleri dener. Günün listelerinin en az %90'ı geldiyse gün kaydedilir, gelmeyenler `failed` alanında listelenir. %90'ın altında kalırsa hiçbir şey yazılmaz, iş hata verir (GitHub sahibine e-posta atar) ve eski site yayında kalır.
+- Aynı gün tekrar çalışınca sadece eksik veya başarısız listeler tekrar denenir. Yedek çalışma bu yüzden eksikleri tamamlar. Gün tamamsa hiçbir şey yapmaz.
+- Elle tetikleme: Actions sekmesi → `daily` → *Run workflow*. `force` seçilirse bugünün bütün listeleri yeniden çekilir.
+- Kod `main`'e push edilince site yeniden build edilir ve yayınlanır (veri çekilmez).
+
+## Localde çalıştırma
+
+Node 20 veya üstü gerekir; siteyi localde sunmak için python3 de gerekir (`npm run serve`/`npm run dev` onu kullanır). Bağımlılık yok, `npm install` gerekmez.
+
+```sh
+npm test                               # testler (ağa çıkmaz)
+npm run fetch -- --countries tr,us     # sadece TR ve US listelerini çek
+npm run dev                            # build alır, siteyi sunar
+```
+
+Sonra tarayıcıda http://localhost:8000 adresini aç.
+
+## Veri formatı
+
+Ham veri, uygulama bilgileri ve build çıktıları [docs/DATA.md](docs/DATA.md) dosyasında tanımlı. Bu dosya bütün scriptler ve site için bağlayıcıdır.
+
+## Sınırlar
+
+- **İndirme sayısı yok.** Apple bunu yayınlamıyor. Sadece sıra var.
+- **Geçmiş, ilk toplama gününden başlar.** Apple eski listeleri vermiyor; geriye dönük veri yok.
+- **Boyut:** Ham veri günde yaklaşık 400 KB. Yılda yaklaşık 150 MB, GitHub'ın 1 GB önerilen repo sınırının altında.
+- **GitHub'ın 60 gün kuralı:** Hareketsiz repolarda zamanlanmış işler 60 gün sonra durdurulur. Günlük veri commit'leri bu sayacı sıfırlar.
+
+## Ziyaretçi sayımı (GoatCounter)
+
+Çerez kullanmayan, ücretsiz GoatCounter kullanılır.
+
+1. https://www.goatcounter.com adresinde ücretsiz hesap aç ve bir kod seç (örnek: `chartlog` → `chartlog.goatcounter.com`).
+2. Bu kodu `site/config.js` dosyasına yaz.
+3. Commit edip `main`'e push et. Site yeniden yayınlanır ve ziyaretler sayılmaya başlar.
+
+## Kurulum notu (GitHub Pages)
+
+Repo ayarlarında *Settings → Pages → Build and deployment → Source* değeri **GitHub Actions** olmalı.
+
+## Hukuki notlar
+
+- Bu proje Apple Inc. ile bağlantılı değildir; Apple tarafından desteklenmez veya onaylanmaz.
+- Uygulama ikonları kopyalanmaz, doğrudan Apple'ın sunucusundan (CDN) gösterilir. Her satır sitenin uygulama sayfasına, o sayfa da App Store'a link verir.
+- Sitede ikonları kapatıp sadece metin gösteren bir ayar vardır.
+- Hak sahibi isterse ilgili içerik kaldırılır.
+- App Store, Apple Inc.'in ticari markasıdır.
+
+## Yol haritası
+
+- Puan sayısı artışı (günlük yeni puan), iTunes Lookup API ile.
+- Daha fazla görünüm: kategori ve ülke karşılaştırmaları.
+- Feed'in güncellenme saati gözlenip cron saatinin ayarlanması.
+
+## Lisans
+
+Kod [MIT](LICENSE) lisanslıdır.
+
+Toplanan veriler (`data/` klasörü) Apple'ın herkese açık RSS feed'inden gelir ve MIT lisansının kapsamında değildir.

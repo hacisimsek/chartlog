@@ -1,0 +1,15 @@
+{
+  "name": "chartlog",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "fetch": "node scripts/fetch.mjs",
+    "build": "node scripts/build.mjs",
+    "serve": "python3 -m http.server 8000 -d site",
+    "dev": "npm run build && npm run serve"
+  }
+}

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHARTLOG — App Store listeleri arşivi</title>
+<meta name="description" content="165 ülkenin App Store ücretsiz ve ücretli listelerini her gün arşivleyen ücretsiz site: bugünkü sıralar, yükselenler, yeni girenler, haftalık ve aylık özet.">
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="main.js"></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./" data-s="site">CHARTLOG</a>
+  <label class="sr" for="scope" data-s="scopeLabel"></label>
+  <select id="scope"></select>
+  <div class="seg" role="group" data-s-aria="kindLabel">
+    <button type="button" data-kind="free" data-s="free" aria-pressed="true"></button>
+    <button type="button" data-kind="paid" data-s="paid" aria-pressed="false"></button>
+  </div>
+  <span class="updated" id="updated"></span>
+  <button type="button" id="icon-toggle" class="plain" data-s="hideIcons" aria-pressed="false"></button>
+</header>
+<nav class="tabs" data-s-aria="viewsLabel">
+  <button type="button" data-view="today" data-s="today" aria-pressed="true"></button>
+  <button type="button" data-view="risers" data-s="risers" aria-pressed="false"></button>
+  <button type="button" data-view="newcomers" data-s="newcomers" aria-pressed="false"></button>
+  <button type="button" data-view="week" data-s="week" aria-pressed="false"></button>
+  <button type="button" data-view="month" data-s="month" aria-pressed="false"></button>
+</nav>
+<main>
+  <p id="stale" class="notice" hidden></p>
+  <div id="content" aria-busy="true"></div>
+  <p id="status" class="sr" role="status"></p>
+</main>
+<footer id="footer"></footer>
+</body>
+</html>
