@@ -86,7 +86,7 @@ jobs:
       cancel-in-progress: false
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.deployment_retry.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -106,7 +106,19 @@ jobs:
         with:
           path: site
 
+      # deploy-pages sometimes finds "0 artifacts" right after the upload (seen twice). The upload is
+      # still there, so one retry in the same job after a short wait is enough; re-running the job
+      # instead would fail on a duplicate artifact.
       - id: deployment
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before retrying deploy
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+
+      - id: deployment_retry
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v4
 
       - name: Fail if a feed was below 90%
