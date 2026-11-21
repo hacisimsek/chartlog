@@ -1,17 +1,20 @@
-// Builds site/data from data/raw + data/apps.json. Usage: node scripts/build.mjs [--data data] [--out site/data]
+// Builds site/data from data/raw + data/ratings + data/apps.json. Usage: node scripts/build.mjs [--data data] [--out site/data]
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { dateRange, chartLists, chartView, globalSeries, globalView, appHistory } from './lib.mjs';
+import { dateRange, chartLists, chartView, globalSeries, globalView, appHistory, ratingGrowth } from './lib.mjs';
 
 const { values: args } = parseArgs({ options: { data: { type: 'string', default: 'data' }, out: { type: 'string', default: 'site/data' } } });
 const rawDir = join(args.data, 'raw');
 const KINDS = ['free', 'paid'];
 
-const all = (existsSync(rawDir) ? readdirSync(rawDir) : [])
+// Sorted dates of the dir/YYYY/YYYY-MM-DD.json files.
+const listDays = dir => (existsSync(dir) ? readdirSync(dir) : [])
   .filter(y => /^\d{4}$/.test(y))
-  .flatMap(y => readdirSync(join(rawDir, y)).filter(f => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).map(f => f.slice(0, 10)))
+  .flatMap(y => readdirSync(join(dir, y)).filter(f => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).map(f => f.slice(0, 10)))
   .sort();
+const readDay = (dir, d) => JSON.parse(readFileSync(join(dir, d.slice(0, 4), `${d}.json`), 'utf8'));
+const all = listDays(rawDir);
 if (!all.length) {
   console.error(`build: no raw day file in ${rawDir}/YYYY/YYYY-MM-DD.json`);
   process.exit(1);
@@ -19,10 +22,17 @@ if (!all.length) {
 const D = all.at(-1);
 const have = new Set(all);
 const days = {};
-for (const d of dateRange(D, 90)) if (have.has(d)) days[d] = JSON.parse(readFileSync(join(rawDir, d.slice(0, 4), `${d}.json`), 'utf8'));
+for (const d of dateRange(D, 90)) if (have.has(d)) days[d] = readDay(rawDir, d);
 const appsPath = join(args.data, 'apps.json');
 const meta = existsSync(appsPath) ? JSON.parse(readFileSync(appsPath, 'utf8')) : {};
 const today = days[D];
+
+const ratingsDir = join(args.data, 'ratings');
+const ratingDates = listDays(ratingsDir).filter(d => d <= D);
+const month = new Set(dateRange(D, 31));
+const ratings = {};
+for (const d of ratingDates) if (month.has(d)) ratings[d] = readDay(ratingsDir, d);
+for (const [id, g] of ratingGrowth(ratings)) if (meta[id]) Object.assign(meta[id], g);
 
 rmSync(args.out, { recursive: true, force: true });
 mkdirSync(join(args.out, 'c'), { recursive: true });
@@ -37,10 +47,11 @@ write('meta.json', {
   countries: Object.keys(today.charts).filter(cc => Object.keys(today.charts[cc]).length).sort(),
   failed: today.failed ?? [],
   built: new Date().toISOString(),
+  ratingsDate: ratingDates.at(-1) ?? null,
 });
 
 function writeChart(cc, kind, v) {
-  const ids = new Set([v.today, v.risers, v.newcomers, v.week, v.month].flat().map(x => x.id));
+  const ids = new Set([v.today, v.risers, v.newcomers, v.week, v.month, v.quarter].flat().map(x => x.id));
   const apps = {};
   for (const id of ids) if (meta[id]) apps[id] = meta[id];
   write(`c/${cc}-${kind}.json`, { date: D, cc, kind, ...v, apps });

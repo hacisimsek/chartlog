@@ -44,8 +44,27 @@ Chart kinds in this project: `free` (top-free) and `paid` (top-paid).
 ```
 
 - Updated on each fetch. Name/artist/icon come from the `us` row when the app is in a US chart that day, else from the first country (alphabetical) where it appears. On a partial re-run only `us` rows overwrite an existing entry.
-- `g` is the App Store **genre id** (`genres[0].genreId`), not the name: feed names are localized per storefront (e.g. "Productividad", "教育"). The site maps ids to Turkish names. When no row carries a genre (common for the biggest apps), `fetch.mjs` asks the iTunes Lookup API (`https://itunes.apple.com/lookup?country=us&id=…`, batches of 150, 3.5 s apart, max 30 calls per run) for `primaryGenreId`. `"0"` = the lookup returned nothing (not in the US store); it is not retried. A non-numeric `g` (older data) counts as missing.
+- `g` is the App Store **genre id** (`genres[0].genreId`), not the name: feed names are localized per storefront (e.g. "Productividad", "教育"). The site maps ids to Turkish names. When no row carries a genre (common for the biggest apps), the lookup step below fills it from `primaryGenreId`. `"0"` = the lookup returned nothing (not in the US store); it is not looked up again for the genre alone, but it is replaced whenever the app is looked up for ratings and the lookup returns it. A non-numeric `g` (older data) counts as missing.
 - App Store link is derived, never stored: `https://apps.apple.com/app/id{id}`.
+- **Rating fields** (from the iTunes Lookup API, US store, refreshed daily for every app in that day's charts):
+  `r` = `averageUserRating` rounded to 1 decimal (omitted when `userRatingCount` is 0), `rc` = `userRatingCount`,
+  `rd` = `releaseDate` as `YYYY-MM-DD`. Omitted entirely for apps the US lookup does not return (not in the US store).
+  Ratings are per storefront; we use the US store for every app because it is the largest sample. Say so wherever they are shown.
+
+### `data/ratings/YYYY/YYYY-MM-DD.json` — daily US rating counts, minified
+
+```json
+{ "6448311069": 12435658, "1440147259": 0 }
+```
+
+- `id -> userRatingCount` for every id the lookup returned that day; `null` for chart ids the lookup did not return (or returned without a count), so later runs that day do not ask again. Used only to compute rating-count growth; nulls are ignored.
+
+### Lookup step (in `fetch.mjs`, after charts are merged and before writing)
+
+- Ids to look up: every id in the merged day's charts that is not already in that day's ratings file, plus every app in `apps.json` whose genre is missing (`fillGenres` rules above).
+- `https://itunes.apple.com/lookup?country=us&id=…`, batches of 150 ids, 3.5 s between calls, at most 90 calls per run, 15 s timeout; stop after 3 failed calls (the rest is retried on the next run of the same day, or skipped).
+- From each result: `primaryGenreId` -> `g` (only when `g` is missing or `"0"`), `averageUserRating`/`userRatingCount`/`releaseDate` -> `r`/`rc`/`rd`, and `rc` into the day's ratings file. Ids not returned: `g = "0"` if missing; rating fields untouched.
+- Lookup failures never fail the run.
 
 ## Built data (`site/data/`, git-ignored, written by `scripts/build.mjs`)
 
@@ -58,17 +77,17 @@ Definitions (all use the latest raw day `D` and calendar days before it):
 - **week ago** `w`: rank on `D-7` (null if absent or that day is missing).
 - **risers**: items in today's chart with `w != null` and `w - r > 0`, sorted by `w - r` desc, then `r` asc; top 25.
 - **newcomers**: items in today's chart that are absent from every raw day in `D-7..D-1` that has this chart; sorted by `r`; top 25. Empty if no earlier day has this chart.
-- **week / month**: window of 7 / 30 calendar days ending at `D`. Per app: `score = Σ points(r)` over days in the window where it is in the chart, `days` = that count, `avg` = mean rank over those days (1 decimal). Sorted by score desc, then avg asc; top 100.
-- **global (per kind)**: per app on one day, `score = Σ points(r)` over all countries whose chart for that kind exists that day; `c` = number of those countries; `best` = `[cc, r, n]`: the lowest r, the first cc (alphabetical) with it, and `n` = how many countries share that rank. Global today = top 100 by score desc, then c desc. Global prev/week-ago ranks are the app's rank in the global top 100 of `D-1` / `D-7`. Global week/month: `score` summed over the window's days, `days` = days in that day's global top 100, `avg` = mean global rank over those days.
+- **week / month / quarter**: window of 7 / 30 / 90 calendar days ending at `D`. Per app: `score = Σ points(r)` over days in the window where it is in the chart, `days` = that count, `avg` = mean rank over those days (1 decimal). Sorted by score desc, then avg asc; top 100.
+- **global (per kind)**: per app on one day, `score = Σ points(r)` over all countries whose chart for that kind exists that day; `c` = number of those countries; `best` = `[cc, r, n]`: the lowest r, the first cc (alphabetical) with it, and `n` = how many countries share that rank. Global today = top 100 by score desc, then c desc. Global prev/week-ago ranks are the app's rank in the global top 100 of `D-1` / `D-7`. Global week/month/quarter: `score` summed over the window's days, `days` = days in that day's global top 100, `avg` = mean global rank over those days.
 
 ### `site/data/meta.json`
 
 ```json
 { "date": "2026-11-22", "fetchedAt": "...", "days": 31, "first": "2026-10-23",
-  "countries": ["ae", "..."], "failed": ["sb/paid"], "built": "..." }
+  "countries": ["ae", "..."], "failed": ["sb/paid"], "built": "...", "ratingsDate": "2026-11-22" }
 ```
 
-`countries` = codes with at least one chart on `D`.
+`countries` = codes with at least one chart on `D`. `ratingsDate` = date of the newest ratings file at or before `D` (null if none).
 
 ### `site/data/c/{cc}-{kind}.json` and `site/data/c/global-{kind}.json`
 
@@ -80,19 +99,23 @@ Definitions (all use the latest raw day `D` and calendar days before it):
   "newcomers":[ { "id": "1", "r": 3 } ],
   "week":     [ { "id": "1", "score": 650, "days": 7, "avg": 3.4 } ],
   "month":    [ { "id": "1", "score": 2800, "days": 30, "avg": 5.1 } ],
-  "apps": { "1": { "n": "...", "a": "...", "i": "...", "g": "..." } }
+  "quarter":  [ { "id": "1", "score": 8100, "days": 88, "avg": 6.0 } ],
+  "apps": { "1": { "n": "...", "a": "...", "i": "...", "g": "6007", "r": 4.8, "rc": 12435658, "rd": "2023-05-18", "rg": 41210, "rgd": 30 } }
 }
 ```
 
 - `h` = ranks for `D-6..D` (7 values, null = not in chart or day missing).
 - Global files also carry `s` (score), `c` (country count) and `best` on `today` items.
 - `apps` holds metadata only for ids that appear in this file, so the page never loads `data/apps.json`.
+  It carries `n, a, i, g` and, when known, `r, rc, rd` from `apps.json`, plus **rating-count growth**:
+  `rg` = `rc` in the newest ratings file at or before `D` minus `rc` in the oldest ratings file within
+  `D-30 .. D-1` that has the id; `rgd` = days between those two files. Both omitted when there is no such pair.
 - A chart file exists only if that chart exists on `D`.
 
 ### `site/data/apps/{id}.json` — per-app history, last 90 days
 
 ```json
-{ "id": "1", "n": "...", "a": "...", "i": "...", "g": "...",
+{ "id": "1", "n": "...", "a": "...", "i": "...", "g": "...", "r": 4.8, "rc": 12435658, "rd": "2023-05-18", "rg": 41210, "rgd": 30,
   "dates": ["2026-08-25", "...", "2026-11-22"],
   "ranks": { "tr/free": [null, 4, 3], "us/paid": [null, null, 88] },
   "global": { "free": [null, 12, 9] } }

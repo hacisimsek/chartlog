@@ -1,4 +1,4 @@
-// Fetch Apple App Store top charts for one UTC day into data/raw and data/apps.json (see docs/DATA.md).
+// Fetch Apple App Store top charts for one UTC day into data/raw, data/ratings and data/apps.json (see docs/DATA.md).
 import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -90,31 +90,47 @@ const realGenre = (g) => (genreId(g) && g !== '0' ? g : '');
 
 export const lookupUrl = (ids) => `https://itunes.apple.com/lookup?country=us&id=${ids.join(',')}`;
 
-// The feed leaves genres empty for ~10% of rows (often the biggest apps), so ask the iTunes Lookup API
-// for the rest. Apple allows ~20 calls/min: batches of 150 ids, 3.5 s apart, at most 30 calls a run;
-// whatever is left waits for the next run. Ids the lookup does not return (not in the US store) get '0'.
+// One iTunes Lookup pass (US store) for genres the feed left empty (~10% of rows, often the biggest apps)
+// and for ratings of every app in today's charts. Apple allows ~20 calls/min: batches of 150 ids, 3.5 s
+// apart, at most 90 calls a run; whatever is left waits for the next run of the day.
+// chartIds: ids in the merged day's charts. ratings: that day's ratings file (id -> rc, or null when
+// the lookup had no rating for it), mutated; ids already in it are not looked up again that day. Ids the lookup does not return get g='0' if g is missing.
 // shortcut: a batch that keeps failing (e.g. one bad id) is retried every run; split batches if that shows up.
-export async function fillGenres(apps, { fetch = globalThis.fetch, sleep, maxCalls = 30, batch = 150 } = {}) {
-  const missing = Object.keys(apps).filter((id) => !genreId(apps[id].g));
-  let filled = 0, calls = 0, errors = 0;
-  for (let i = 0; i < missing.length && calls < maxCalls && errors < 3; i += batch) {
+export async function lookupApps(apps, chartIds, ratings, { fetch = globalThis.fetch, sleep, maxCalls = 90, batch = 150 } = {}) {
+  const inCharts = new Set(chartIds);
+  const ids = [...new Set([
+    ...[...inCharts].filter((id) => apps[id] && !(id in ratings)),
+    ...Object.keys(apps).filter((id) => !genreId(apps[id].g)),
+  ])];
+  let found = 0, calls = 0, errors = 0;
+  for (let i = 0; i < ids.length && calls < maxCalls && errors < 3; i += batch) {
     if (calls++) await sleep(3500);
-    const ids = missing.slice(i, i + batch);
+    const chunk = ids.slice(i, i + batch);
     try {
-      const res = await fetch(lookupUrl(ids), { signal: AbortSignal.timeout(15000) });
+      const res = await fetch(lookupUrl(chunk), { signal: AbortSignal.timeout(15000) });
       if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
-      const found = new Map(JSON.parse(await res.text()).results
-        .filter((r) => /^\d+$/.test(String(r.primaryGenreId ?? '')))
-        .map((r) => [String(r.trackId), String(r.primaryGenreId)]));
-      for (const id of ids) {
-        apps[id].g = found.get(id) || '0';
-        if (found.has(id)) filled++;
+      const byId = new Map(JSON.parse(await res.text()).results.map((r) => [String(r.trackId), r]));
+      for (const id of chunk) {
+        const app = apps[id], r = byId.get(id);
+        if (!r) {
+          if (!genreId(app.g)) app.g = '0';
+          if (inCharts.has(id)) ratings[id] = null; // not in the US store: don't ask again today
+          continue;
+        }
+        found++;
+        const g = String(r.primaryGenreId ?? '');
+        if (!realGenre(app.g)) app.g = /^\d+$/.test(g) ? g : '0';
+        if (!Number.isInteger(r.userRatingCount)) { if (inCharts.has(id)) ratings[id] = null; continue; }
+        app.rc = ratings[id] = r.userRatingCount;
+        if (app.rc > 0) app.r = Math.round(r.averageUserRating * 10) / 10;
+        else delete app.r;
+        if (r.releaseDate) app.rd = r.releaseDate.slice(0, 10);
       }
     } catch {
       errors++;
     }
   }
-  return { missing: missing.length, filled, calls, errors };
+  return { ids: ids.length, found, calls, errors };
 }
 
 async function readJson(file) {
@@ -148,10 +164,26 @@ export async function run({
   const start = now();
   const rawFile = join(dataDir, 'raw', date.slice(0, 4), `${date}.json`);
   const appsFile = join(dataDir, 'apps.json');
+  const ratingsFile = join(dataDir, 'ratings', date.slice(0, 4), `${date}.json`);
   const existing = await readJson(rawFile);
   const plan = planCharts(countries, existing, force);
+  // Lookups the first pass left (call cap, errors) are retried by a later pass even when no chart is.
+  const lookup = async (raw, apps) => {
+    const ratings = (await readJson(ratingsFile)) || {};
+    const chartIds = new Set(Object.values(raw?.charts || {}).flatMap((c) => Object.values(c).flat()));
+    const stats = await lookupApps(apps, chartIds, ratings, { fetch, sleep });
+    return { ratings, stats, line: `lookup: ${stats.found}/${stats.ids} found, ${stats.calls} calls, ${stats.errors} errors` };
+  };
   if (plan.length === 0) {
-    log('nothing to do');
+    const apps = (await readJson(appsFile)) || {};
+    const { ratings, stats, line } = await lookup(existing, apps);
+    if (!stats.calls) {
+      log('nothing to do');
+      return 0;
+    }
+    await writeJson(appsFile, apps);
+    if (Object.keys(ratings).length) await writeJson(ratingsFile, ratings);
+    log(`${date} charts complete | ${line}`);
     return 0;
   }
 
@@ -176,11 +208,12 @@ export async function run({
   }
 
   const apps = updateApps((await readJson(appsFile)) || {}, results, !existing || force);
-  const genres = await fillGenres(apps, { fetch, sleep });
-  // apps first: if the raw write fails after it, a re-run still refetches those charts.
+  const { ratings, line } = await lookup(raw, apps);
+  // apps and ratings first: if the raw write fails after them, a re-run still refetches those charts.
   await writeJson(appsFile, apps);
+  if (Object.keys(ratings).length) await writeJson(ratingsFile, ratings);
   await writeJson(rawFile, raw);
-  log(`${summary} | genres: ${genres.filled}/${genres.missing} filled, ${genres.calls} lookups, ${genres.errors} errors`);
+  log(`${summary} | ${line}`);
   return 0;
 }
 

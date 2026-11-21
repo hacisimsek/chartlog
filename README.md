@@ -4,7 +4,8 @@ Apple App Store üst listelerini her gün arşivleyen, ücretsiz ve giriş gerek
 
 - **Kapsam:** 165 ülke (`countries.json`), her ülke için ücretsiz ve ücretli ilk 100 listesi.
 - **Sıklık:** Günde bir kez (UTC 03:17), UTC 15:17'de yedek çalışma.
-- **Görünümler:** Ülke bazında bugün, yükselenler, yeni girenler, haftalık ve aylık özet. Ayrıca bütün ülkeleri birleştiren global liste ve uygulama başına 90 günlük geçmiş.
+- **Görünümler:** Ana sayfa **Popüler · 30 gün**: son 30 günde listede en yüksekte ve en uzun kalan uygulamalar (her gün için `101 − sıra` puanı toplanır). Ayrıca 7 ve 90 günlük popüler listeler, bugün, yükselenler, yeni girenler; bütün ülkeleri birleştiren global liste ve uygulama başına 90 günlük geçmiş.
+- **Fırsat sinyalleri:** Her gün listedeki uygulamaların puanı (★), değerlendirme sayısı, değerlendirme artışı (en fazla 30 gün) ve çıkış tarihi Apple'ın iTunes Lookup API'sinden alınır (ABD App Store'u). "Puanı 4,0'ın altında" ve "Son 12 ayda çıktı" filtreleri, popüler ama kullanıcıların memnun olmadığı ya da yeni çıkıp hızla yükselen uygulamaları süzer. Apple kopya uygulamaları reddeder (App Review Kural 4.1); aynı fikre farklı bir yaklaşım getirmek serbesttir.
 - **Canlı site:** https://hacisimsek.github.io/chartlog/
 - **Dil:** Türkçe ve İngilizce. Tarayıcı dili Türkçe ise Türkçe, değilse İngilizce açılır; sağ üstteki TR/EN düğmesiyle değişir (seçim tarayıcıda saklanır). Doğrudan link için `?lang=en` veya `?lang=tr`. Metinler `site/common.js` içindeki `TR` ve `EN` nesnelerinde.
 
@@ -74,7 +75,6 @@ Repo ayarlarında *Settings → Pages → Build and deployment → Source* değe
 
 ## Yol haritası
 
-- Puan sayısı artışı (günlük yeni puan), iTunes Lookup API ile.
 - Daha fazla görünüm: kategori ve ülke karşılaştırmaları.
 - Feed'in güncellenme saati gözlenip cron saatinin ayarlanması.
 

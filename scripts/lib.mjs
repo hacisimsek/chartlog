@@ -50,7 +50,7 @@ export function windowTop(lists, D, n, scores) {
     .map(({ a, avg }) => ({ id: a.id, score: a.score, days: a.days, avg: Math.round(avg * 10) / 10 }));
 }
 
-// today / risers / newcomers / week / month for one ranked series; null if no list on D.
+// today / risers / newcomers / week / month / quarter for one ranked series; null if no list on D.
 export function chartView(lists, D, scores) {
   if (!lists[D]) return null;
   const h = dateRange(D, 7).map(d => rankMap(lists[d]));
@@ -76,7 +76,10 @@ export function chartView(lists, D, scores) {
   // prevDate/weekAgoDate tell the site whether p/w = null means "not in the chart" or "no data that day".
   const prevDate = prev ? addDays(D, -1) : null;
   const weekAgoDate = weekAgo ? addDays(D, -7) : null;
-  return { prevDate, weekAgoDate, today, risers, newcomers, week: windowTop(lists, D, 7, scores), month: windowTop(lists, D, 30, scores) };
+  return {
+    prevDate, weekAgoDate, today, risers, newcomers,
+    week: windowTop(lists, D, 7, scores), month: windowTop(lists, D, 30, scores), quarter: windowTop(lists, D, 90, scores),
+  };
 }
 
 // Global standing for one kind on one raw day; null if no country has that chart.
@@ -103,16 +106,16 @@ export function globalDay(day, kind) {
   return { top, scores: new Map([...m.values()].map(g => [g.id, g.s])) };
 }
 
-// Global series for one kind. Full score maps are kept only for the 30-day month window (memory).
+// Global series for one kind. Full score maps are kept only for the 90-day quarter window (memory).
 export function globalSeries(days, kind, D) {
   const lists = {}, tops = {}, scores = {};
-  const monthStart = addDays(D, -29);
+  const quarterStart = addDays(D, -89);
   for (const [d, f] of Object.entries(days)) {
     const g = globalDay(f, kind);
     if (!g) continue;
     tops[d] = g.top;
     lists[d] = g.top.map(x => x.id);
-    if (d >= monthStart && d <= D) scores[d] = g.scores;
+    if (d >= quarterStart && d <= D) scores[d] = g.scores;
   }
   return { lists, tops, scores };
 }
@@ -147,4 +150,21 @@ export function appHistory(days, D, globalLists) {
     for (const [kind, lists] of Object.entries(globalLists)) lists[d]?.forEach((id, i) => put(get(id).global, kind, k, i + 1));
   });
   return { dates, apps };
+}
+
+// Rating-count growth. ratings = { date: { id: rc } } for the files in D-30..D.
+// rg = rc in the newest file minus rc in the oldest earlier file that has the id; rgd = days between them.
+export function ratingGrowth(ratings) {
+  const dates = Object.keys(ratings).sort();
+  const last = dates.pop();
+  const base = new Map();
+  // null = the lookup had no rating for that id that day (see fetch.mjs); never a growth endpoint.
+  for (const d of dates) for (const [id, rc] of Object.entries(ratings[d])) if (rc != null && !base.has(id)) base.set(id, [rc, d]);
+  const out = new Map();
+  if (!last) return out;
+  for (const [id, rc] of Object.entries(ratings[last])) {
+    const b = rc != null && base.get(id);
+    if (b) out.set(id, { rg: rc - b[0], rgd: (Date.parse(last) - Date.parse(b[1])) / 864e5 });
+  }
+  return out;
 }

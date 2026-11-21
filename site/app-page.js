@@ -1,6 +1,6 @@
 import {
   STRINGS as S, el, svgEl, setState, fetchJSON, countryName, chartLabel, iconEl,
-  fmtDate, fmtShort, initShell, drawSegments, genreName, announce,
+  fmtDate, fmtShort, fmtNum, fmtAvg, signed, initShell, drawSegments, genreName, announce,
 } from './common.js';
 
 const main = document.getElementById('content');
@@ -53,9 +53,22 @@ function summary(s) {
   return S.chartSummary(s.label, app.dates.length, days, best?.[0] ?? '—', fmtDate(best?.[1]), s.ranks.at(-1));
 }
 
+// "★ 4.8 (12,435,658 ratings · +41,210 in 30 days) · US App Store · Released May 18, 2023"; missing parts left out.
+function ratingLine() {
+  const inner = [
+    app.rc != null && S.ratingsCount(fmtNum(app.rc)),
+    app.rg != null && app.rgd && S.growthIn(signed(app.rg), app.rgd),
+  ].filter(Boolean).join(' · ');
+  const star = app.r != null || inner ? `★ ${app.r != null ? fmtAvg(app.r) : '—'}` : '';
+  const rating = star && (inner ? `${star} (${inner})` : star);
+  const released = /^\d{4}-\d{2}-\d{2}$/.test(app.rd || '') && S.releasedOn(fmtDate(app.rd));
+  return [rating, rating && S.usSource, released].filter(Boolean).join(' · ');
+}
+
 function render() {
   document.title = `${app.n || id} — ${S.site}`;
   const series = seriesList();
+  const rating = ratingLine();
   redraw = null;
 
   const head = el('header', { class: 'app-head' },
@@ -63,6 +76,7 @@ function render() {
     el('div', {},
       el('h1', {}, app.n || `#${id}`),
       el('p', { class: 'muted' }, [app.a, genreName(app.g)].filter(x => x && x !== '—').join(' · ')),
+      rating && el('p', { class: 'muted' }, rating),
       el('a', { href: `https://apps.apple.com/app/id${id}`, rel: 'noopener', target: '_blank' }, S.openStore)));
 
   const nodes = [head];

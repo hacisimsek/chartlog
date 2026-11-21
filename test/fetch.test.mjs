@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, readdir, writeFile, mkdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseFeed, fetchChart, planCharts, mergeRaw, updateApps, fillGenres, lookupUrl, run } from '../scripts/fetch.mjs';
+import { parseFeed, fetchChart, planCharts, mergeRaw, updateApps, lookupApps, lookupUrl, run } from '../scripts/fetch.mjs';
 
 const fixture = (name) => readFileSync(new URL(`fixtures/fetch/${name}`, import.meta.url), 'utf8');
 const TR = fixture('tr-free.json');
@@ -14,16 +14,20 @@ const feedOf = (n) => JSON.stringify({ feed: { results: Array.from({ length: n }
 
 const ok = (body) => ({ status: 200, body });
 const FAIL = { status: 500, body: 'error' };
+const lookupBody = (results) => ok(JSON.stringify({ results }));
+// Lookup that returns every requested id.
+const echoLookup = (url) => lookupBody(url.split('id=')[1].split(',').map((id) => ({ trackId: Number(id), userRatingCount: 0 })));
 
-// routes: { "cc/kind": response | [responses in order, last one repeats] }; unknown charts get 500.
+// routes: { "cc/kind" | "lookup": response | (url) => response | [responses in order, last one repeats] }; unknown routes get 500.
 function mockFetch(routes) {
   const calls = [];
   const fetch = async (url) => {
-    const [, cc, kind] = url.match(/v2\/(\w+)\/apps\/top-(free|paid)\//);
-    const key = `${cc}/${kind}`;
+    const m = url.match(/v2\/(\w+)\/apps\/top-(free|paid)\//);
+    const key = m ? `${m[1]}/${m[2]}` : 'lookup';
     calls.push(key);
     let r = routes[key] ?? FAIL;
     if (Array.isArray(r)) r = r.length > 1 ? r.shift() : r[0];
+    if (typeof r === 'function') r = r(url);
     return { status: r.status, text: async () => r.body };
   };
   return { fetch, calls };
@@ -82,6 +86,7 @@ test('run writes raw + apps, re-run fetches only failed/missing charts, then not
   for (const cc of countries) for (const kind of ['free', 'paid']) routes[`${cc}/${kind}`] = ok(TR);
   routes['us/free'] = ok(US);
   delete routes['gb/paid']; // 9/10 = exactly 90%: still written
+  routes.lookup = echoLookup;
 
   const first = mockFetch(routes);
   assert.equal(await run({ ...base, countries, dataDir: dir, fetch: first.fetch }), 0);
@@ -93,16 +98,16 @@ test('run writes raw + apps, re-run fetches only failed/missing charts, then not
   assert.deepEqual(Object.keys(raw.charts), countries);
   assert.equal(raw.charts.gb.paid, undefined);
   const apps = await readJson(join(dir, 'apps.json'));
-  assert.deepEqual(apps['1001'], { n: 'Food US', a: 'Food Inc', i: 'https://is1-ssl.mzstatic.com/image/thumb/a/100x100bb.png', g: '6023' });
+  assert.deepEqual(apps['1001'], { n: 'Food US', a: 'Food Inc', i: 'https://is1-ssl.mzstatic.com/image/thumb/a/100x100bb.png', g: '6023', rc: 0 });
   assert.equal(apps['1002'].n, 'Game US');
   assert.equal(apps['1002'].g, '6014'); // us row has no genre, a later row fills it
-  assert.equal(apps['1003'].g, '');
+  assert.equal(apps['1003'].g, '0'); // no row has a genre and the lookup has none either
   assert.ok(!(await listFiles(dir)).some((f) => f.endsWith('.tmp')));
 
   // Re-run asks for one more country: only gb/paid (failed) and it/* (missing) are fetched.
-  const second = mockFetch({ 'gb/paid': ok(feedOf(37)), 'it/free': ok(TR), 'it/paid': ok(TR) });
+  const second = mockFetch({ 'gb/paid': ok(feedOf(37)), 'it/free': ok(TR), 'it/paid': ok(TR), lookup: echoLookup });
   assert.equal(await run({ ...base, countries: [...countries, 'it'], dataDir: dir, fetch: second.fetch }), 0);
-  assert.deepEqual(second.calls.toSorted(), ['gb/paid', 'it/free', 'it/paid']);
+  assert.deepEqual(second.calls.toSorted(), ['gb/paid', 'it/free', 'it/paid', 'lookup']); // lookup: the 37 new ids only
   raw = await readJson(rawPath(dir));
   assert.deepEqual(raw.failed, []);
   assert.equal(raw.charts.gb.paid.length, 37);
@@ -130,7 +135,7 @@ test('--force refetches all; a chart failing now keeps its old value', async () 
   delete routes['de/free'];
   const { fetch, calls } = mockFetch(routes);
   assert.equal(await run({ ...base, countries, dataDir: dir, fetch, force: true }), 0);
-  assert.equal(new Set(calls).size, 10);
+  assert.equal(new Set(calls.filter((c) => c !== 'lookup')).size, 10);
   const raw = await readJson(rawPath(dir));
   assert.deepEqual(raw.charts.de.free, ['9']);
   assert.deepEqual(raw.failed, ['zz/paid']);
@@ -175,23 +180,99 @@ test('updateApps: us beats others, genre kept when the new row has none', () => 
   assert.equal(partial['1002'].n, 'Oyun TR');
 });
 
-test('fillGenres: batches lookups, marks ids the lookup does not return as 0, keeps ids on errors', async () => {
-  const apps = { 1: { g: '' }, 2: { g: 'Juegos' }, 3: { g: '6007' }, 4: { g: '' }, 5: { g: '' } };
+const lookupFetch = (respond) => {
   const urls = [];
   const fetch = async (url) => {
     urls.push(url);
-    if (urls.length === 2) return { status: 503, text: async () => '' };
-    return { status: 200, text: async () => JSON.stringify({ results: [{ trackId: 1, primaryGenreId: 6014 }, { trackId: 2, primaryGenreId: 6005 }] }) };
+    const r = respond(url.split('id=')[1].split(','), urls.length);
+    return { status: r.status, text: async () => r.body };
   };
+  return { fetch, urls };
+};
+const nosleep = async () => {};
+
+test('lookupApps: batches lookups, marks ids the lookup does not return as 0, keeps ids on errors', async () => {
+  const apps = { 1: { g: '' }, 2: { g: 'Juegos' }, 3: { g: '6007' }, 4: { g: '' }, 5: { g: '' } };
+  const { fetch, urls } = lookupFetch((ids, n) => (n === 2 ? FAIL : lookupBody([{ trackId: 1, primaryGenreId: 6014 }, { trackId: 2, primaryGenreId: 6005 }])));
   const slept = [];
-  const r = await fillGenres(apps, { fetch, sleep: async (ms) => slept.push(ms), batch: 2 });
+  const r = await lookupApps(apps, new Set(), {}, { fetch, sleep: async (ms) => slept.push(ms), batch: 2 });
   assert.deepEqual(urls, [lookupUrl(['1', '2']), lookupUrl(['4', '5'])]);
   assert.deepEqual(slept, [3500]);
-  assert.deepEqual(r, { missing: 4, filled: 2, calls: 2, errors: 1 });
+  assert.deepEqual(r, { ids: 4, found: 2, calls: 2, errors: 1 });
   assert.deepEqual([apps[1].g, apps[2].g, apps[3].g, apps[4].g, apps[5].g], ['6014', '6005', '6007', '', '']);
   const none = { 9: { g: '' } };
-  await fillGenres(none, { fetch: async () => ({ status: 200, text: async () => '{"results":[]}' }), sleep: async () => {} });
+  await lookupApps(none, new Set(), {}, { fetch: async () => ({ status: 200, text: async () => '{"results":[]}' }), sleep: nosleep });
   assert.equal(none[9].g, '0');
+});
+
+test('lookupApps: rating fields, rc=0 drops r, ids not returned keep ratings', async () => {
+  const apps = { 1: { g: '6014' }, 2: { g: '6005', r: 4.2, rc: 5 }, 3: { g: '6000', r: 3, rc: 9, rd: '2019-01-01' } };
+  const ratings = {};
+  const { fetch } = lookupFetch(() => lookupBody([
+    { trackId: 1, primaryGenreId: 6000, averageUserRating: 4.66666, userRatingCount: 1234, releaseDate: '2023-05-18T07:00:00Z' },
+    { trackId: 2, primaryGenreId: 6005, averageUserRating: 0, userRatingCount: 0, releaseDate: '2024-01-02T00:00:00Z' },
+  ]));
+  const r = await lookupApps(apps, new Set(['1', '2', '3']), ratings, { fetch, sleep: nosleep });
+  assert.deepEqual(r, { ids: 3, found: 2, calls: 1, errors: 0 });
+  assert.deepEqual(apps[1], { g: '6014', r: 4.7, rc: 1234, rd: '2023-05-18' }); // a real genre is not replaced
+  assert.deepEqual(apps[2], { g: '6005', rc: 0, rd: '2024-01-02' });
+  assert.deepEqual(apps[3], { g: '6000', r: 3, rc: 9, rd: '2019-01-01' });
+  assert.deepEqual(ratings, { 1: 1234, 2: 0, 3: null }); // 3: not returned -> null, not asked again today
+});
+
+test('lookupApps: skips ids already in the ratings file; "0" genre is not re-looked-up but its rating is refreshed', async () => {
+  const apps = { 1: { g: '6014' }, 2: { g: '0' }, 3: { g: '0' } };
+  const { fetch, urls } = lookupFetch(() => lookupBody([{ trackId: 2, primaryGenreId: 6016, averageUserRating: 3.04, userRatingCount: 7 }]));
+  await lookupApps(apps, new Set(['1', '2']), { 1: 50 }, { fetch, sleep: nosleep });
+  assert.deepEqual(urls, [lookupUrl(['2'])]); // 1 already looked up today, 3 not in a chart and genre '0'
+  assert.deepEqual(apps[2], { g: '6016', r: 3, rc: 7 });
+});
+
+test('lookupApps: at most maxCalls calls, stops after 3 failed calls', async () => {
+  const apps = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [String(i), { g: '' }]));
+  const capped = lookupFetch(() => lookupBody([]));
+  assert.equal((await lookupApps(apps, new Set(), {}, { fetch: capped.fetch, sleep: nosleep, batch: 1, maxCalls: 4 })).calls, 4);
+  const failing = lookupFetch(() => FAIL);
+  const r = await lookupApps(apps, new Set(), {}, { fetch: failing.fetch, sleep: nosleep, batch: 1 });
+  assert.deepEqual(r, { ids: 6, found: 0, calls: 3, errors: 3 });
+  const thrown = await lookupApps(apps, new Set(), {}, { fetch: async () => { throw new Error('timeout'); }, sleep: nosleep, batch: 1 });
+  assert.equal(thrown.errors, 3);
+});
+
+test('run writes the day ratings file, merges it on re-run, and a later pass only looks up what is left', async () => {
+  const dir = await tmp();
+  const ratingsPath = join(dir, 'ratings', '2026', '2026-11-22.json');
+  const countries = ['de', 'fr', 'gb', 'tr', 'us'];
+  const routes = {};
+  for (const cc of countries) for (const kind of ['free', 'paid']) routes[`${cc}/${kind}`] = ok(TR);
+  routes['us/free'] = ok(US);
+  delete routes['gb/paid'];
+  // First pass: lookup returns only 1001; 1002 and 1003 are absent (not in the US store).
+  routes.lookup = lookupBody([{ trackId: 1001, primaryGenreId: 6023, averageUserRating: 4.5, userRatingCount: 10, releaseDate: '2020-01-01T08:00:00Z' }]);
+  const logged = [];
+  const first = mockFetch(routes);
+  assert.equal(await run({ ...base, countries, dataDir: dir, fetch: first.fetch, log: (s) => logged.push(s) }), 0);
+  assert.match(logged[0], /\| lookup: 1\/3 found, 1 calls, 0 errors$/);
+  // 1002 and 1003 were not returned: stored as null so no later pass today asks for them again.
+  assert.deepEqual(await readJson(ratingsPath), { 1001: 10, 1002: null, 1003: null });
+  let apps = await readJson(join(dir, 'apps.json'));
+  assert.deepEqual(apps['1001'], { n: 'Food US', a: 'Food Inc', i: 'https://is1-ssl.mzstatic.com/image/thumb/a/100x100bb.png', g: '6023', r: 4.5, rc: 10, rd: '2020-01-01' });
+  assert.equal(apps['1003'].g, '0');
+
+  // Second pass retries gb/paid (new id 5000); only 5000 is looked up, and the file is merged.
+  const second = mockFetch({ ...routes, 'gb/paid': ok(feedOf(1)), lookup: lookupBody([{ trackId: 5000, userRatingCount: 1, averageUserRating: 5 }]) });
+  assert.equal(await run({ ...base, countries, dataDir: dir, fetch: second.fetch }), 0);
+  assert.deepEqual(second.calls.filter((c) => c === 'lookup'), ['lookup']);
+  assert.deepEqual(await readJson(ratingsPath), { 1001: 10, 1002: null, 1003: null, 5000: 1 });
+  apps = await readJson(join(dir, 'apps.json'));
+  assert.equal(apps['1001'].rc, 10);
+
+  // Third pass: every chart fetched and every chart id answered today, so no call at all.
+  const third = mockFetch({});
+  logged.length = 0;
+  assert.equal(await run({ ...base, countries, dataDir: dir, fetch: third.fetch, log: (s) => logged.push(s) }), 0);
+  assert.deepEqual(third.calls, []);
+  assert.deepEqual(logged, ['nothing to do']);
 });
 
 test('re-run that only retries a still-failing chart keeps the day (90% rule is on the merged day)', async () => {
@@ -229,4 +310,15 @@ test('--force over a complete day still needs 90% fresh charts, else writes noth
   const degraded = { 'tr/free': ok(TR), 'us/free': ok(US) }; // 2/10 fresh
   assert.equal(await run({ ...base, countries, dataDir: dir, force: true, fetch: mockFetch(degraded).fetch, now: () => new Date('2026-11-22T09:00:00Z') }), 1);
   assert.equal(await readFile(rawPath(dir), 'utf8'), before);
+});
+
+test('lookupApps: chart ids the lookup does not return are stored as null and not asked again', async () => {
+  const apps = { 1: { g: '6007' }, 2: { g: '6007' } };
+  const ratings = {};
+  const urls = [];
+  const fetch = async (url) => { urls.push(url); return { status: 200, text: async () => JSON.stringify({ results: [{ trackId: 1, primaryGenreId: 6007, userRatingCount: 5, averageUserRating: 4.2 }] }) }; };
+  await lookupApps(apps, ['1', '2'], ratings, { fetch, sleep: async () => {} });
+  assert.deepEqual(ratings, { 1: 5, 2: null });
+  await lookupApps(apps, ['1', '2'], ratings, { fetch, sleep: async () => {} });
+  assert.equal(urls.length, 1);
 });

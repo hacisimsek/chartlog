@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import {
-  points, addDays, dateRange, chartLists, windowTop, chartView, globalDay, globalSeries, globalView, appHistory,
+  points, addDays, dateRange, chartLists, windowTop, chartView, globalDay, globalSeries, globalView, appHistory, ratingGrowth,
 } from '../scripts/lib.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
@@ -68,6 +68,28 @@ test('week and month: score, days, avg, order', () => {
     { id: '3', score: 784, days: 8, avg: 3 },
   ]);
   assert.deepEqual(ids(v.month), ['1', '2', '3', '4', '5', '6', '11', '7', '8', '10', '9']);
+  assert.deepEqual(v.quarter, v.month); // every fixture day in the window is within 30 days
+});
+
+test('quarter: 90-day window, global quarter keeps scores for 90 days', () => {
+  const lists = { '2026-08-12': ['old'], '2026-08-13': ['a'], '2026-10-01': ['b'], [D]: ['c'] };
+  const v = chartView(lists, D);
+  assert.deepEqual(ids(v.quarter), ['a', 'b', 'c']); // 08-12 is D-90: outside
+  assert.deepEqual(ids(v.month), ['c']);
+  const gdays = { '2026-08-13': { charts: { tr: { free: ['a', 'b'] } } }, [D]: { charts: { tr: { free: ['b'] }, us: { free: [...filler(99, 'f'), 'a'] } } } };
+  const g = globalView(globalSeries(gdays, 'free', D), D);
+  assert.deepEqual(g.quarter.find(x => x.id === 'a'), { id: 'a', score: 101, days: 1, avg: 1 });
+});
+
+test('ratingGrowth: newest minus oldest earlier file with the id', () => {
+  const g = ratingGrowth({
+    '2026-10-11': { a: 10 },
+    '2026-11-01': { a: 20, b: 5, gone: 1 },
+    '2026-11-10': { a: 25, b: 5, only: 3 },
+  });
+  assert.deepEqual([...g], [['a', { rg: 15, rgd: 30 }], ['b', { rg: 0, rgd: 9 }]]);
+  assert.equal(ratingGrowth({ '2026-11-10': { a: 1 } }).size, 0);
+  assert.equal(ratingGrowth({}).size, 0);
 });
 
 test('window: equal score sorted by avg asc', () => {
@@ -167,7 +189,7 @@ test('build end to end', () => {
     const meta = read('meta.json');
     assert.deepEqual({ ...meta, built: undefined }, {
       date: D, fetchedAt: '2026-11-10T03:19:44.120Z', days: 10, first: '2026-06-01',
-      countries: ['sb', 'tr', 'us'], failed: ['sb/paid'], built: undefined,
+      countries: ['sb', 'tr', 'us'], failed: ['sb/paid'], built: undefined, ratingsDate: D,
     });
     assert.deepEqual(readdirSync(join(out, 'c')).sort(),
       ['global-free.json', 'global-paid.json', 'sb-free.json', 'tr-free.json', 'tr-paid.json', 'us-free.json', 'us-paid.json']);
@@ -176,7 +198,15 @@ test('build end to end', () => {
     assert.equal(tr.cc, 'tr');
     assert.equal(tr.kind, 'free');
     assert.deepEqual(Object.keys(tr.apps).sort(), ['1', '2', '3', '4', '5']); // 6..11 have no metadata
-    assert.deepEqual(tr.apps['4'], { n: 'Four', a: 'A4', i: 'https://x/4.png', g: 'Food & Drink' });
+    // ratings files: 10-10 is outside D-30..D, 11-12 is after D; 2 is missing on 10-11, 20 is only on D, 3 has no ratings at all
+    assert.deepEqual(tr.apps['4'], { n: 'Four', a: 'A4', i: 'https://x/4.png', g: 'Food & Drink', rc: 0, rd: '2022-03-04', rg: 0, rgd: 9 });
+    assert.deepEqual(tr.apps['1'], { n: 'One', a: 'A1', i: 'https://x/1.png', g: 'Games', r: 4.5, rc: 1200, rd: '2020-01-01', rg: 200, rgd: 30 });
+    assert.deepEqual(tr.apps['2'], { n: 'Two', a: 'A2', i: 'https://x/2.png', g: 'Games', r: 4.8, rc: 600, rd: '2021-02-03', rg: 100, rgd: 9 });
+    assert.deepEqual(tr.apps['5'], { n: 'Five', a: 'A5', i: 'https://x/5.png', g: 'Games', rg: 2, rgd: 1 });
+    assert.deepEqual(tr.apps['3'], { n: 'Three', a: 'A3', i: 'https://x/3.png', g: '' });
+    assert.deepEqual(tr.quarter, tr.month);
+    assert.ok(read('c/global-free.json').quarter.length);
+    assert.equal(read('c/us-free.json').apps['20'].rg, undefined); // only in the newest file
     assert.equal(tr.today.length, 8);
     assert.equal(read('c/global-free.json').cc, 'global');
     assert.equal(read('c/global-free.json').today[0].s, 296);
@@ -186,6 +216,8 @@ test('build end to end', () => {
     assert.equal(files.includes('99.json'), false);
     const app4 = read('apps/4.json');
     assert.equal(app4.n, 'Four');
+    assert.deepEqual([app4.rc, app4.rd, app4.rg, app4.rgd], [0, '2022-03-04', 0, 9]);
+    assert.equal(read('apps/1.json').rg, 200);
     assert.equal(app4.dates.length, 90);
     assert.deepEqual(app4.global.free.slice(-2), [3, 1]);
     const app10 = read('apps/10.json');
@@ -197,6 +229,13 @@ test('build end to end', () => {
     const fail = spawnSync(process.execPath, [join(ROOT, 'scripts/build.mjs'), '--data', empty, '--out', join(tmp, 'o2')], { encoding: 'utf8' });
     assert.equal(fail.status, 1);
     assert.match(fail.stderr, /no raw day file/);
+
+    mkdirSync(join(empty, 'raw/2026'));
+    writeFileSync(join(empty, 'raw/2026', `${D}.json`), readFileSync(join(RAW, `${D}.json`)));
+    const out3 = join(tmp, 'o3');
+    const noRatings = spawnSync(process.execPath, [join(ROOT, 'scripts/build.mjs'), '--data', empty, '--out', out3], { encoding: 'utf8' });
+    assert.equal(noRatings.status, 0, noRatings.stderr);
+    assert.equal(JSON.parse(readFileSync(join(out3, 'meta.json'), 'utf8')).ratingsDate, null);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -208,4 +247,10 @@ test('chartView: prevDate/weekAgoDate are null when that day has no chart', () =
   assert.equal(v.weekAgoDate, '2026-11-03');
   assert.equal(v.today[0].p, null);
   assert.equal(chartView({ '2026-11-10': ['a'], '2026-11-09': ['b'] }, '2026-11-10').prevDate, '2026-11-09');
+});
+
+test('ratingGrowth ignores null (not found) entries at both ends', () => {
+  const g = ratingGrowth({ '2026-11-01': { a: 10, b: null }, '2026-11-02': { b: 7 }, '2026-11-03': { a: null, b: 9 } });
+  assert.equal(g.has('a'), false);
+  assert.deepEqual(g.get('b'), { rg: 2, rgd: 1 });
 });
