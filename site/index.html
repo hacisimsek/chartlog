@@ -1,10 +1,29 @@
 <!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CHARTLOG — App Store listeleri arşivi</title>
-<meta name="description" content="165 ülkenin App Store ücretsiz ve ücretli listelerini her gün arşivleyen ücretsiz site: bugünkü sıralar, yükselenler, yeni girenler, haftalık ve aylık özet.">
+<title>App Store Top Charts by Country: Trending iPhone Apps | CHARTLOG</title>
+<meta name="description" content="Daily App Store top charts for 165 countries: top free and paid iPhone apps and games, trending and fastest rising apps, new entries and rank history.">
+<link rel="alternate" hreflang="en" href="https://hacisimsek.github.io/chartlog/">
+<link rel="alternate" hreflang="tr" href="https://hacisimsek.github.io/chartlog/?lang=tr">
+<link rel="alternate" hreflang="x-default" href="https://hacisimsek.github.io/chartlog/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CHARTLOG">
+<meta property="og:title" content="App Store Top Charts by Country: Trending iPhone Apps | CHARTLOG">
+<meta property="og:description" content="Daily App Store top charts for 165 countries: top free and paid iPhone apps and games, trending and fastest rising apps, new entries and rank history.">
+<meta property="og:url" content="https://hacisimsek.github.io/chartlog/">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="tr_TR">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="App Store Top Charts by Country: Trending iPhone Apps | CHARTLOG">
+<meta name="twitter:description" content="Daily App Store top charts for 165 countries: top free and paid iPhone apps and games, trending and fastest rising apps, new entries and rank history.">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"WebSite","@id":"https://hacisimsek.github.io/chartlog/#website","name":"CHARTLOG","url":"https://hacisimsek.github.io/chartlog/","description":"Daily App Store top charts for 165 countries: top free and paid iPhone apps and games, trending and fastest rising apps, new entries and rank history.","inLanguage":["en","tr"]},
+{"@type":"Dataset","name":"CHARTLOG App Store top charts archive","description":"Daily snapshots of the Apple App Store top free and top paid charts for apps and games in 165 countries, with ranks, rank changes, ratings and rating counts. Collected from Apple's public RSS feed.","url":"https://hacisimsek.github.io/chartlog/","isAccessibleForFree":true,"keywords":["App Store top charts","top free iPhone apps","top paid iPhone apps","trending apps","fastest rising apps","app rankings by country"],"spatialCoverage":"Worldwide (165 countries)","creator":{"@type":"Organization","name":"CHARTLOG","url":"https://hacisimsek.github.io/chartlog/"}}
+]}
+</script>
 <meta name="color-scheme" content="light dark">
 <link rel="stylesheet" href="style.css">
 <script type="module" src="main.js"></script>
@@ -28,9 +47,13 @@
 </header>
 <main>
   <p id="stale" class="notice" hidden></p>
+  <div class="intro">
+    <h1 data-s="introTitle">App Store top charts by country, archived daily</h1>
+    <p><span data-s="introText">Top free and paid iPhone apps and games in 165 countries, with trending and fastest rising apps, new entries and weekly, monthly and quarterly rankings.</span> <a href="top/" data-s="allCharts">Browse all charts by country</a></p>
+  </div>
   <section class="radar" aria-labelledby="radar-title">
     <div class="radar-head">
-      <h1 id="radar-title"><span data-s="radar"></span> <span class="radar-ctx" id="radar-ctx"></span></h1>
+      <h2 id="radar-title"><span data-s="radar"></span> <span class="radar-ctx" id="radar-ctx"></span></h2>
       <button type="button" id="radar-toggle" class="plain" aria-controls="radar-body" aria-expanded="true"></button>
     </div>
     <div id="radar-body">

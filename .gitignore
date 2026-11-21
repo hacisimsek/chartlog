@@ -3,3 +3,6 @@ node_modules/
 .DS_Store
 *.tmp
 .claude/
+site/top/
+site/sitemap.xml
+site/robots.txt

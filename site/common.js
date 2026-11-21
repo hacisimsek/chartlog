@@ -95,6 +95,11 @@ const TR = {
   privacy: 'Gizlilik',
   github: 'GitHub',
   langSwitch: 'EN',
+  titleTail: 'App Store listeleri | CHARTLOG',
+  introTitle: 'Ülkelere göre App Store listeleri, her gün arşivlenir',
+  introText: '165 ülkede en popüler ücretsiz ve ücretli iPhone uygulamaları ve oyunları: yükselenler, yeni girenler, haftalık, aylık ve üç aylık sıralar.',
+  allCharts: 'Tüm listelere ülke ülke göz at',
+  appDesc: (n, by) => `${n}${by ? ` (${by})` : ''}: son 90 günde ülke ve liste bazında App Store sıra geçmişi, puan ve değerlendirme sayısı.`,
   langSwitchLabel: 'EN – Switch to English', // starts with the visible text (WCAG 2.5.3)
 };
 
@@ -193,10 +198,15 @@ const EN = {
   privacy: 'Privacy',
   github: 'GitHub',
   langSwitch: 'TR',
+  titleTail: 'App Store Top Charts | CHARTLOG',
+  introTitle: 'App Store top charts by country, archived daily',
+  introText: 'Top free and paid iPhone apps and games in 165 countries, with trending and fastest rising apps, new entries and weekly, monthly and quarterly rankings.',
+  allCharts: 'Browse all charts by country',
+  appDesc: (n, by) => `${n}${by ? ` by ${by}` : ''}: App Store top chart rank history by country over the last 90 days, with rating and rating count.`,
   langSwitchLabel: "TR – Türkçe'ye geç",
 };
 
-// Language: ?lang=en|tr, else the saved choice, else Turkish for Turkish browsers and English for the rest.
+// Language: ?lang=en|tr, else the saved choice, else English (the site is global; crawlers get English).
 const LANG_KEY = 'chartlog:lang';
 function pickLang() {
   const q = new URLSearchParams(location.search).get('lang');
@@ -205,7 +215,21 @@ function pickLang() {
     return q;
   }
   try { const saved = localStorage.getItem(LANG_KEY); if (saved === 'tr' || saved === 'en') return saved; } catch { /* storage blocked */ }
-  return (navigator.languages || [navigator.language]).some(l => /^tr\b/i.test(l || '')) ? 'tr' : 'en';
+  return 'en';
+}
+const QUERY_TR = new URLSearchParams(location.search).get('lang') === 'tr';
+export const SITE_URL = 'https://hacisimsek.github.io/chartlog/';
+
+// Canonical + hreflang links; a ?lang=tr page is its own canonical so the two languages do not collapse into one.
+export function setCanonical(path) {
+  const href = tr => { const u = new URL(path, SITE_URL); u.searchParams.delete('lang'); if (tr) u.searchParams.set('lang', 'tr'); return u.href; };
+  const put = (sel, attrs) => {
+    const n = document.head.querySelector(sel) || document.head.appendChild(document.createElement('link'));
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  };
+  put('link[rel="canonical"]', { rel: 'canonical', href: href(QUERY_TR) });
+  for (const [l, tr] of [['en', false], ['tr', true], ['x-default', false]]) put(`link[hreflang="${l}"]`, { rel: 'alternate', hreflang: l, href: href(tr) });
+  document.head.querySelector('meta[property="og:url"]')?.setAttribute('content', href(QUERY_TR));
 }
 export const LANG = pickLang();
 const LOCALE = LANG === 'tr' ? 'tr-TR' : 'en-US';
@@ -338,6 +362,8 @@ export function fmtStamp(iso) {
 
 export function initShell({ onIconsChange } = {}) {
   document.documentElement.lang = LANG;
+  // No static canonical in the HTML: GitHub Pages serves the same file for ?lang=tr, so raw and rendered canonicals would differ.
+  if (document.head.querySelector('link[hreflang]')) setCanonical(location.pathname.split('/').pop());
   for (const n of document.querySelectorAll('[data-lang]')) n.hidden = n.dataset.lang !== LANG; // privacy page
   for (const n of document.querySelectorAll('[data-s]')) n.textContent = STRINGS[n.dataset.s];
   const langBtn = document.getElementById('lang-toggle');
@@ -369,7 +395,7 @@ export function initShell({ onIconsChange } = {}) {
 
   document.getElementById('footer')?.replaceChildren(
     el('p', {}, STRINGS.notAffiliated),
-    el('p', {}, STRINGS.source, ' · ', el('a', { href: 'privacy.html' }, STRINGS.privacy), ' · ',
+    el('p', {}, STRINGS.source, ' · ', el('a', { href: 'top/' }, STRINGS.allCharts), ' · ', el('a', { href: 'privacy.html' }, STRINGS.privacy), ' · ',
       el('a', { href: REPO_URL, rel: 'noopener' }, STRINGS.github)),
   );
 

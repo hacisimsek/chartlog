@@ -1,8 +1,10 @@
 import {
   genreName, announce, compareNames,
   STRINGS as S, el, svgEl, setState, fetchJSON, countryName, appHref, iconEl,
-  fmtDate, fmtStamp, fmtNum, fmtAvg, fmtCompact, fmtPct, signed, initShell, drawSegments,
+  fmtDate, fmtStamp, fmtNum, fmtAvg, fmtCompact, fmtPct, signed, initShell, drawSegments, LANG,
 } from './common.js';
+
+const BASE_TITLE = document.title; // keyword title from index.html; Google indexes the default route's rendered title
 
 const KINDS = ['free', 'paid', 'gfree', 'gpaid'];
 // The header has two toggles (apps/games, free/paid); the route keeps one kind: free|paid|gfree|gpaid.
@@ -106,7 +108,8 @@ async function render() {
   for (const b of document.querySelectorAll('[data-type]')) b.setAttribute('aria-pressed', String(b.dataset.type === typeOf(route.kind)));
   for (const b of document.querySelectorAll('[data-price]')) b.setAttribute('aria-pressed', String(b.dataset.price === priceOf(route.kind)));
   for (const b of document.querySelectorAll('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === route.view));
-  document.title = `${countryName(route.scope)} · ${S[route.kind]} · ${S[route.view]} — ${S.site}`;
+  const isDefault = route.scope === 'global' && route.kind === 'free' && route.view === 'month';
+  document.title = isDefault && LANG === 'en' ? BASE_TITLE : `${countryName(route.scope)} · ${S[route.kind]} · ${S[route.view]} — ${S.titleTail}`;
   $('radar-ctx').textContent = `· ${countryName(route.scope)} · ${S[route.kind]}`;
 
   const mine = ++seq;
@@ -250,6 +253,7 @@ function scatter(items, apps) {
 // ---------- table ----------
 // cols: { label, sr?, cls, cell(it, ctx) }. Tier classes: t2 hides at ≤640px, t3 at ≤900px.
 function table(caption, cols, items, ctx) {
+  ctx = { ...ctx, starsMain: cols.includes(col.starsMain) };
   const head = c => (c.sr ? [el('span', { 'aria-hidden': 'true' }, c.label), el('span', { class: 'sr' }, c.sr)] : [c.label]);
   return el('table', { class: 'chart' },
     el('caption', { class: 'sr' }, caption),
@@ -258,9 +262,10 @@ function table(caption, cols, items, ctx) {
 }
 
 // The second line (.m2) only shows on phones, where the secondary columns are hidden.
-function appCell(id, apps) {
+// noStar: the main column already shows the rating, so the line leaves it out.
+function appCell(id, apps, noStar) {
   const m = apps[id] || {};
-  const m2 = [genreName(m.g), m.rd?.slice(0, 4), m.r != null ? `★${fmtAvg(m.r)}` : null, m.rc != null ? fmtCompact(m.rc) : null]
+  const m2 = [genreName(m.g), m.rd?.slice(0, 4), m.r != null && !noStar ? `★${fmtAvg(m.r)}` : null, m.rc != null ? fmtCompact(m.rc) : null]
     .filter(v => v && v !== '—').join(' · ');
   const text = el('span', { class: 'app-text' },
     el('span', { class: 'app-name' }, m.n || `#${id}`),
@@ -326,7 +331,7 @@ const stars = (it, ctx) => {
 const col = {
   rank: { label: C.rank, cls: 'rank', cell: it => it.r },
   pos: { label: C.rank, cls: 'rank', cell: it => it.pos },
-  app: { label: C.app, cls: 'app', cell: (it, ctx) => appCell(it.id, ctx.apps) },
+  app: { label: C.app, cls: 'app', cell: (it, ctx) => appCell(it.id, ctx.apps, ctx.starsMain) },
   dToday: { label: C.delta, sr: C.deltaSr, cls: 'delta', cell: (it, ctx) => delta(it.r, it.p, Boolean(ctx.chart.prevDate)) },
   // Period views: momentum comes from today's chart; apps that dropped out show a muted dot.
   dPeriod: {

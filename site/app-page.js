@@ -1,6 +1,6 @@
 import {
   STRINGS as S, el, svgEl, setState, fetchJSON, countryName, chartLabel, iconEl,
-  fmtDate, fmtShort, fmtNum, fmtAvg, signed, initShell, drawSegments, genreName, announce,
+  fmtDate, fmtShort, fmtNum, fmtAvg, signed, initShell, drawSegments, genreName, announce, setCanonical,
 } from './common.js';
 
 const main = document.getElementById('content');
@@ -67,6 +67,9 @@ function ratingLine() {
 
 function render() {
   document.title = `${app.n || id} — ${S.site}`;
+  const desc = S.appDesc(app.n || `#${id}`, app.a);
+  for (const sel of ['meta[name="description"]', 'meta[property="og:description"]']) document.head.querySelector(sel)?.setAttribute('content', desc);
+  document.head.querySelector('meta[property="og:title"]')?.setAttribute('content', document.title);
   const series = seriesList();
   const rating = ratingLine();
   redraw = null;
@@ -126,6 +129,7 @@ function render() {
 }
 
 initShell({ onIconsChange: () => app && render() });
+if (/^\d+$/.test(id)) setCanonical(`app.html?id=${id}`);
 addEventListener('resize', () => redraw?.());
 
 if (!/^\d+$/.test(id)) {

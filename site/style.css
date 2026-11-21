@@ -94,7 +94,9 @@ main { padding: 12px 16px 24px; max-width: 1180px; }
 
 /* radar: signal bands stacked vertically, up to five apps across inside each */
 .radar-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
-.radar h1 { margin: 0; font-size: 20px; letter-spacing: -.01em; }
+.intro h1 { margin: 0; font: 600 13px/1.4 var(--mono); }
+.intro p { margin: 2px 0 14px; color: var(--muted); font-size: 12.5px; }
+.radar-head h2 { margin: 0; font: 700 20px/1.25 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; text-transform: none; letter-spacing: -.01em; color: var(--fg); }
 .radar-ctx { font-size: 14px; font-weight: 400; color: var(--muted); }
 .lede { margin: 2px 0 12px; color: var(--muted); }
 #signals { display: flex; flex-direction: column; gap: 10px; }
@@ -212,7 +214,7 @@ footer p { margin: 4px 0; }
 }
 @media (max-width: 640px) {
   .sec, .t2, .t3, .app-artist { display: none; }
-  .m2 { display: block; }
+  .m2 { display: block; white-space: normal; overflow-wrap: anywhere; } /* wrap so the rating count is not cut off */
   .updated { margin-left: 0; order: 9; width: 100%; }
   .chart td, .chart th { padding-left: 4px; padding-right: 4px; }
   .filters .count { margin-left: 0; }

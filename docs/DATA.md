@@ -152,3 +152,13 @@ Definitions (all use the latest raw day `D` and calendar days before it):
   history either. Re-measure with real data after ~30 days (`git count-objects -vH`); the biggest lever left is storing
   ratings weekly instead of daily (≈ −30%)..
 - GitHub repo soft limit 1 GB, Pages site 1 GB, 100 GB/month bandwidth.
+
+## Static pages (`site/top/`, git-ignored, written by `scripts/pages.mjs`)
+
+Run after `build.mjs` (`npm run build` runs both). Reads `site/data/meta.json` and `site/data/c/*.json`; English only, no JS.
+
+- `site/top/{cc}-{kind}.html`: one per chart file whose name matches `^([a-z]{2}|global)-(free|paid|gfree|gpaid)\.json$` (others are skipped). Today's top 100 (rank, change vs `prevDate` when it exists, name → `../app.html?id=`, developer, English genre, US rating), up to 10 risers and newcomers, links to the country's other kinds, the hub and `../#/{cc}/{kind}/today`, and a JSON-LD `ItemList` of the top 10. Rows with a non-numeric id are dropped. Every data string is HTML-escaped; JSON-LD escapes `<`, `>`, `&`.
+- `site/top/index.html`: hub, Worldwide first, then countries by English name (`Intl.DisplayNames('en')`).
+- `site/sitemap.xml`: home, `top/`, every chart page, `privacy.html`; `lastmod` = `meta.date`. `site/robots.txt`: allow all + `Sitemap:` line.
+- Absolute URLs use `https://hacisimsek.github.io/chartlog/` (constant `BASE` in `pages.mjs`; change it with a custom domain).
+- Size (2026-11-21 real data): 664 chart pages + hub ≈ 22 MB.

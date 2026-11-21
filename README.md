@@ -8,7 +8,8 @@ Apple App Store üst listelerini her gün arşivleyen, ücretsiz ve giriş gerek
 - **Radar:** Sayfanın üstünde, seçili ülke ve liste için dört sinyal: hızla yükselenler, yeni girenler, popüler ama puanı düşük olanlar, değerlendirmesi hızla artanlar; ayrıca popülerlik–puan dağılım grafiği. Yükselenler ve yeni girenler için en az 8 günlük veri gerekir. Radar gizlenebilir.
 - **Fırsat sinyalleri:** Her gün listedeki uygulamaların puanı (★), değerlendirme sayısı, değerlendirme artışı (en fazla 30 gün) ve çıkış tarihi Apple'ın iTunes Lookup API'sinden alınır (ABD App Store'u). "Puanı 4,0'ın altında" ve "Son 12 ayda çıktı" filtreleri, popüler ama kullanıcıların memnun olmadığı ya da yeni çıkıp hızla yükselen uygulamaları süzer. Apple kopya uygulamaları reddeder (App Review Kural 4.1); aynı fikre farklı bir yaklaşım getirmek serbesttir.
 - **Canlı site:** https://hacisimsek.github.io/chartlog/
-- **Dil:** Türkçe ve İngilizce. Tarayıcı dili Türkçe ise Türkçe, değilse İngilizce açılır; sağ üstteki TR/EN düğmesiyle değişir (seçim tarayıcıda saklanır). Doğrudan link için `?lang=en` veya `?lang=tr`. Metinler `site/common.js` içindeki `TR` ve `EN` nesnelerinde.
+- **Dil:** Varsayılan İngilizce (site global kitleye hitap ediyor). Türkçe, sağ üstteki TR/EN düğmesiyle seçilir (seçim tarayıcıda saklanır). Doğrudan link için `?lang=tr` veya `?lang=en`. Metinler `site/common.js` içindeki `TR` ve `EN` nesnelerinde.
+- **Arama motoru sayfaları:** `/top/` altında her ülke ve liste için sunucuda üretilmiş, JavaScript gerektirmeyen İngilizce sayfalar (ör. `top/us-free.html`), hepsine link veren bir dizin (`top/index.html`), `sitemap.xml` ve `robots.txt`. Ayrıntı aşağıda, *SEO* bölümünde.
 
 ## Nasıl çalışır
 
@@ -20,6 +21,9 @@ data/raw/YYYY/YYYY-MM-DD.json + data/apps.json   (repoya commit edilir)
   │  scripts/build.mjs
   ▼
 site/data/   (özetler; repoya girmez)
+  │  scripts/pages.mjs
+  ▼
+site/top/*.html + sitemap.xml + robots.txt   (statik SEO sayfaları; repoya girmez)
   │  actions/deploy-pages
   ▼
 GitHub Pages: hacisimsek.github.io/chartlog/
@@ -53,6 +57,20 @@ Ham veri, uygulama bilgileri ve build çıktıları [docs/DATA.md](docs/DATA.md)
 - **Geçmiş, ilk toplama gününden başlar.** Apple eski listeleri vermiyor; geriye dönük veri yok.
 - **Boyut:** Günlük dosyalar yaklaşık 1 MB (sıralar + değerlendirme sayıları), ama git bunları kendisi sıkıştırıp ardışık günlerin farkını sakladığı için repo günde yaklaşık 285 KB, yılda yaklaşık 100 MB büyür (30 günlük simülasyonla ölçüldü). GitHub'ın önerdiği 1 GB sınırına yaklaşık 10 yıl var. Dosyaları gzip ile sıkıştırmak repoyu büyüttüğü için yapılmıyor; ayrıntı `docs/DATA.md`'de.
 - **GitHub'ın 60 gün kuralı:** Hareketsiz repolarda zamanlanmış işler 60 gün sonra durdurulur. Günlük veri commit'leri bu sayacı sıfırlar.
+
+## SEO
+
+Ana site hash ile yönlenen, tarayıcıda çizilen bir uygulama (`#/us/free/today`); arama motorları bunu iyi indekslemez. Bu yüzden `scripts/pages.mjs` her build'de `site/data`'dan taranabilir statik sayfalar üretir (`npm run build` iki adımı da çalıştırır):
+
+- `site/top/{ülke}-{liste}.html` (ör. `us-free.html`, `jp-gfree.html`, `global-paid.html`): benzersiz başlık ("Top Free iPhone Apps in United States — App Store Chart, Nov 21, 2026"), ilk 3 uygulamayı içeren açıklama, canonical URL, günün ilk 100'ü tablo olarak, haftanın yükselenleri ve yeni girenleri, JSON-LD `ItemList`, ülkenin diğer listelerine, dizine ve etkileşimli görünüme linkler.
+- `site/top/index.html`: bütün sayfaların dizini (önce Worldwide, sonra ülkeler İngilizce adlarına göre).
+- `site/sitemap.xml` ve `site/robots.txt`. Üçü de üretilir, repoya girmez.
+- Apple'dan gelen her metin (uygulama, geliştirici adı) HTML'de ve JSON-LD'de escape edilir; ülke kodu, liste türü ve uygulama numarası kullanılmadan önce doğrulanır.
+
+**Sahibin yapması gerekenler:**
+
+- Site `hacisimsek.github.io/chartlog/` altında bir *proje sitesi*. Tarayıcılar `robots.txt`'yi yalnızca alan adının kökünden (`hacisimsek.github.io/robots.txt`) okur, bizim `chartlog/robots.txt` dosyamızı okumaz. Bu yüzden sitemap'i elle bildir: [Google Search Console](https://search.google.com/search-console) ve [Bing Webmaster Tools](https://www.bing.com/webmasters) üzerinde `https://hacisimsek.github.io/chartlog/` için mülk ekle (URL öneki), sonra `https://hacisimsek.github.io/chartlog/sitemap.xml` adresini gönder.
+- Özel bir alan adı (ör. `chartlog.app`) SEO'ya yardım eder (kendi `robots.txt`'si, marka adı, kalıcı adres) ama yıllık ücretlidir; bütçe 0 olduğu için şimdilik yok. Alınırsa `pages.mjs` içindeki `BASE` sabitini değiştir.
 
 ## Ziyaretçi sayımı (GoatCounter)
 
