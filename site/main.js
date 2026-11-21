@@ -4,7 +4,11 @@ import {
   fmtDate, fmtStamp, fmtNum, fmtAvg, fmtCompact, signed, initShell, drawSegments,
 } from './common.js';
 
-const KINDS = ['free', 'paid'];
+const KINDS = ['free', 'paid', 'gfree', 'gpaid'];
+// The header has two toggles (apps/games, free/paid); the route keeps one kind: free|paid|gfree|gpaid.
+const kindOf = (type, price) => (type === 'games' ? 'g' : '') + price;
+const typeOf = kind => (kind.startsWith('g') ? 'games' : 'apps');
+const priceOf = kind => kind.replace(/^g/, '');
 const VIEWS = ['today', 'risers', 'newcomers', 'week', 'month', 'quarter'];
 const NEED = { today: 1, risers: 8, newcomers: 8, week: 7, month: 30, quarter: 90 };
 const FILTERABLE = ['today', 'week', 'month', 'quarter'];
@@ -69,7 +73,8 @@ async function render() {
   if (location.hash !== canonical) history.replaceState(null, '', canonical);
 
   scopeSel.value = route.scope;
-  for (const b of document.querySelectorAll('[data-kind]')) b.setAttribute('aria-pressed', String(b.dataset.kind === route.kind));
+  for (const b of document.querySelectorAll('[data-type]')) b.setAttribute('aria-pressed', String(b.dataset.type === typeOf(route.kind)));
+  for (const b of document.querySelectorAll('[data-price]')) b.setAttribute('aria-pressed', String(b.dataset.price === priceOf(route.kind)));
   for (const b of document.querySelectorAll('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === route.view));
   document.title = `${countryName(route.scope)} · ${S[route.kind]} · ${S[route.view]} — ${S.site}`;
 
@@ -265,7 +270,8 @@ function setupHeader() {
     ...countries.map(([cc, name]) => el('option', { value: cc }, `${name} (${cc.toUpperCase()})`)),
   );
   scopeSel.addEventListener('change', () => go({ scope: scopeSel.value }));
-  for (const b of document.querySelectorAll('[data-kind]')) b.addEventListener('click', () => go({ kind: b.dataset.kind }));
+  for (const b of document.querySelectorAll('[data-type]')) b.addEventListener('click', () => go({ kind: kindOf(b.dataset.type, priceOf(parseRoute().kind)) }));
+  for (const b of document.querySelectorAll('[data-price]')) b.addEventListener('click', () => go({ kind: kindOf(typeOf(parseRoute().kind), b.dataset.price) }));
   for (const b of document.querySelectorAll('[data-view]')) b.addEventListener('click', () => go({ view: b.dataset.view }));
 }
 

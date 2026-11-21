@@ -2,7 +2,7 @@
 
 Apple App Store üst listelerini her gün arşivleyen, ücretsiz ve giriş gerektirmeyen bir site.
 
-- **Kapsam:** 165 ülke (`countries.json`), her ülke için ücretsiz ve ücretli ilk 100 listesi.
+- **Kapsam:** 165 ülke (`countries.json`), her ülke için ücretsiz ve ücretli ilk 100 **uygulama** ve **oyun** listesi (günde 660 liste). Uygulamalar Apple'ın RSS v2 feed'inden, oyunlar eski iTunes RSS'in oyun kategorisinden (genre 6014) gelir; oyunlarda alt tür (Bulmaca, Strateji…) gösterilir.
 - **Sıklık:** Günde bir kez (UTC 03:17), UTC 15:17'de yedek çalışma.
 - **Görünümler:** Ana sayfa **Popüler · 30 gün**: son 30 günde listede en yüksekte ve en uzun kalan uygulamalar (her gün için `101 − sıra` puanı toplanır). Ayrıca 7 ve 90 günlük popüler listeler, bugün, yükselenler, yeni girenler; bütün ülkeleri birleştiren global liste ve uygulama başına 90 günlük geçmiş.
 - **Fırsat sinyalleri:** Her gün listedeki uygulamaların puanı (★), değerlendirme sayısı, değerlendirme artışı (en fazla 30 gün) ve çıkış tarihi Apple'ın iTunes Lookup API'sinden alınır (ABD App Store'u). "Puanı 4,0'ın altında" ve "Son 12 ayda çıktı" filtreleri, popüler ama kullanıcıların memnun olmadığı ya da yeni çıkıp hızla yükselen uygulamaları süzer. Apple kopya uygulamaları reddeder (App Review Kural 4.1); aynı fikre farklı bir yaklaşım getirmek serbesttir.
@@ -13,7 +13,7 @@ Apple App Store üst listelerini her gün arşivleyen, ücretsiz ve giriş gerek
 
 ```
 GitHub Actions cron (günde 2 kez)
-  │  scripts/fetch.mjs: 165 ülke × 2 liste = 330 istek
+  │  scripts/fetch.mjs: 165 ülke × 4 liste = 660 istek
   ▼
 data/raw/YYYY/YYYY-MM-DD.json + data/apps.json   (repoya commit edilir)
   │  scripts/build.mjs

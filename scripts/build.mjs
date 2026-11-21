@@ -6,7 +6,7 @@ import { dateRange, chartLists, chartView, globalSeries, globalView, appHistory,
 
 const { values: args } = parseArgs({ options: { data: { type: 'string', default: 'data' }, out: { type: 'string', default: 'site/data' } } });
 const rawDir = join(args.data, 'raw');
-const KINDS = ['free', 'paid'];
+const KINDS = ['free', 'paid', 'gfree', 'gpaid'];
 
 // Sorted dates of the dir/YYYY/YYYY-MM-DD.json files.
 const listDays = dir => (existsSync(dir) ? readdirSync(dir) : [])

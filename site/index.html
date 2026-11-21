@@ -14,9 +14,13 @@
   <a class="brand" href="./" data-s="site">CHARTLOG</a>
   <label class="sr" for="scope" data-s="scopeLabel"></label>
   <select id="scope"></select>
+  <div class="seg" role="group" data-s-aria="typeLabel">
+    <button type="button" data-type="apps" data-s="apps" aria-pressed="true"></button>
+    <button type="button" data-type="games" data-s="games" aria-pressed="false"></button>
+  </div>
   <div class="seg" role="group" data-s-aria="kindLabel">
-    <button type="button" data-kind="free" data-s="free" aria-pressed="true"></button>
-    <button type="button" data-kind="paid" data-s="paid" aria-pressed="false"></button>
+    <button type="button" data-price="free" data-s="free" aria-pressed="true"></button>
+    <button type="button" data-price="paid" data-s="paid" aria-pressed="false"></button>
   </div>
   <span class="updated" id="updated"></span>
   <button type="button" id="icon-toggle" class="plain" data-s="hideIcons" aria-pressed="false"></button>

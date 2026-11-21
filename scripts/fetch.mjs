@@ -4,19 +4,34 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
-export const KINDS = { free: 'top-free', paid: 'top-paid' };
+// free/paid: Apple's RSS v2 apps feed (it has no games). gfree/gpaid: games, from the legacy iTunes RSS
+// filtered to genre 6014 (measured 2026-11-21: all 330 charts on the first try, ~1 s, no hangs).
+export const KINDS = { free: 'top-free', paid: 'top-paid', gfree: 'topfreeapplications', gpaid: 'toppaidapplications' };
 const DELAYS = [500, 1000, 2000, 3000, 5000];
 // Normal responses take 1-3 s, but ~35-40% of requests hang at random (measured 2026-11-21,
 // independent of concurrency), so fail fast and retry: 6 attempts leave ~0.4% failing per chart.
 const TIMEOUT = 5000;
 
-export const feedUrl = (cc, kind) =>
-  `https://rss.marketingtools.apple.com/api/v2/${cc}/apps/${KINDS[kind]}/100/apps.json`;
+export const feedUrl = (cc, kind) => (kind.startsWith('g')
+  ? `https://itunes.apple.com/${cc}/rss/${KINDS[kind]}/limit=100/genre=6014/json`
+  : `https://rss.marketingtools.apple.com/api/v2/${cc}/apps/${KINDS[kind]}/100/apps.json`);
+
+// Legacy iTunes RSS entry -> the v2 row shape the rest of this file uses. `entry` is a single object
+// (not an array) when the chart has one row.
+const legacyRow = (e) => ({
+  id: e?.id?.attributes?.['im:id'],
+  name: e?.['im:name']?.label,
+  artistName: e?.['im:artist']?.label,
+  artworkUrl100: e?.['im:image']?.at?.(-1)?.label,
+  genres: [{ genreId: e?.category?.attributes?.['im:id'] }],
+});
 
 // Returns feed rows, or throws with the reason the response is not valid.
 export function parseFeed(status, text) {
   if (status !== 200) throw new Error(`HTTP ${status}`);
-  const rows = JSON.parse(text)?.feed?.results;
+  const feed = JSON.parse(text)?.feed;
+  const entry = feed?.entry;
+  const rows = feed?.results ?? (entry && (Array.isArray(entry) ? entry : [entry]).map(legacyRow));
   if (!Array.isArray(rows) || rows.length < 1 || rows.length > 100) throw new Error('bad results length');
   if (!rows.every((r) => /^\d+$/.test(r?.id))) throw new Error('bad id');
   return rows;
@@ -36,8 +51,8 @@ export async function fetchChart(cc, kind, { fetch = globalThis.fetch, sleep } =
 }
 
 // Charts ("cc/kind") to fetch this run.
-export function planCharts(countries, existing, force) {
-  const all = countries.flatMap((cc) => Object.keys(KINDS).map((kind) => `${cc}/${kind}`));
+export function planCharts(countries, existing, force, kinds = Object.keys(KINDS)) {
+  const all = countries.flatMap((cc) => kinds.map((kind) => `${cc}/${kind}`));
   if (!existing || force) return all;
   const has = (key) => { const [cc, kind] = key.split('/'); return Boolean(existing.charts?.[cc]?.[kind]); };
   return [...new Set([...(existing.failed || []), ...all.filter((key) => !has(key))])];
@@ -71,13 +86,15 @@ export function updateApps(apps, results, fullRun) {
       const id = String(row.id);
       const old = apps[id];
       // Genre names are localized per storefront, so store the numeric genreId; the site names it.
-      const g = genreId(row.genres?.[0]?.genreId);
+      let g = genreId(row.genres?.[0]?.genreId);
+      if (g === '6014' && /^70\d\d$/.test(old?.g ?? '')) g = old.g; // keep the game subgenre the lookup found
       if (done.has(id) || (old && !fullRun && !us)) {
         if (g && old && !realGenre(old.g)) old.g = g; // kept row has no genre: take the next one seen
         continue;
       }
       done.add(id);
-      apps[id] = { n: row.name, a: row.artistName, i: row.artworkUrl100, g: g || genreId(old?.g) };
+      // ...old keeps the lookup's rating fields (r/rc/rd) until today's lookup refreshes them.
+      apps[id] = { ...old, n: row.name, a: row.artistName, i: row.artworkUrl100, g: g || genreId(old?.g) };
     }
   }
   return apps;
@@ -87,6 +104,9 @@ export function updateApps(apps, results, fullRun) {
 const genreId = (g) => (/^\d+$/.test(g ?? '') ? g : '');
 // '0' only means "the US lookup found nothing"; a genre from any feed row replaces it.
 const realGenre = (g) => (genreId(g) && g !== '0' ? g : '');
+
+// Looked up now and no US rating: old values would otherwise survive via updateApps' ...old forever.
+const dropRatings = (app) => { delete app.r; delete app.rc; delete app.rd; };
 
 export const lookupUrl = (ids) => `https://itunes.apple.com/lookup?country=us&id=${ids.join(',')}`;
 
@@ -115,12 +135,16 @@ export async function lookupApps(apps, chartIds, ratings, { fetch = globalThis.f
         if (!r) {
           if (!genreId(app.g)) app.g = '0';
           if (inCharts.has(id)) ratings[id] = null; // not in the US store: don't ask again today
+          dropRatings(app);
           continue;
         }
         found++;
         const g = String(r.primaryGenreId ?? '');
-        if (!realGenre(app.g)) app.g = /^\d+$/.test(g) ? g : '0';
-        if (!Number.isInteger(r.userRatingCount)) { if (inCharts.has(id)) ratings[id] = null; continue; }
+        // Games: store the first subgenre (7001 Action … 7019 Word) instead of the plain 6014 "Games".
+        const sub = (r.genreIds || []).find((x) => /^70\d\d$/.test(x));
+        if (sub) app.g = sub;
+        else if (!realGenre(app.g)) app.g = /^\d+$/.test(g) ? g : '0';
+        if (!Number.isInteger(r.userRatingCount)) { if (inCharts.has(id)) ratings[id] = null; dropRatings(app); continue; }
         app.rc = ratings[id] = r.userRatingCount;
         if (app.rc > 0) app.r = Math.round(r.averageUserRating * 10) / 10;
         else delete app.r;
@@ -157,7 +181,7 @@ async function pool(items, limit, fn) {
 
 // Returns the process exit code.
 export async function run({
-  date, countries, dataDir, concurrency = 8, force = false,
+  date, countries, dataDir, concurrency = 8, force = false, kinds = Object.keys(KINDS),
   fetch = globalThis.fetch, sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
   now = () => new Date(), log = console.log, logErr = console.error,
 }) {
@@ -166,7 +190,7 @@ export async function run({
   const appsFile = join(dataDir, 'apps.json');
   const ratingsFile = join(dataDir, 'ratings', date.slice(0, 4), `${date}.json`);
   const existing = await readJson(rawFile);
-  const plan = planCharts(countries, existing, force);
+  const plan = planCharts(countries, existing, force, kinds);
   // Lookups the first pass left (call cap, errors) are retried by a later pass even when no chart is.
   const lookup = async (raw, apps) => {
     const ratings = (await readJson(ratingsFile)) || {};
@@ -198,7 +222,7 @@ export async function run({
   const raw = mergeRaw(existing, date, now().toISOString(), results);
   // The 90% rule applies to the whole day after merging, not to this run's plan: a re-run that only
   // retries a few still-failing charts must not throw away a day that is already 99% complete.
-  const all = planCharts(countries, null, true);
+  const all = planCharts(countries, null, true, kinds);
   const have = all.filter((key) => { const [cc, kind] = key.split('/'); return raw.charts[cc]?.[kind]; }).length;
   const summary = `${date} ok ${ok}/${plan.length} failed: ${failedNow.join(',') || '-'} day ${have}/${all.length} ${((now() - start) / 1000).toFixed(1)}s`;
   // A --force run must also refresh 90% itself, or old charts would pass the day rule unrefreshed.

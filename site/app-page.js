@@ -10,12 +10,12 @@ let selected = null;
 let redraw = null;
 
 function seriesList() {
-  const list = ['free', 'paid']
+  const list = ['free', 'paid', 'gfree', 'gpaid']
     .filter(kind => Array.isArray(app.global?.[kind]))
     .map(kind => ({ cc: 'global', kind, ranks: app.global[kind] }));
   const rest = Object.entries(app.ranks || {})
     .map(([key, ranks]) => { const [cc, kind] = key.split('/'); return { cc, kind, ranks }; })
-    .filter(s => /^[a-z]{2}$/.test(s.cc) && (s.kind === 'free' || s.kind === 'paid') && Array.isArray(s.ranks))
+    .filter(s => /^[a-z]{2}$/.test(s.cc) && ['free', 'paid', 'gfree', 'gpaid'].includes(s.kind) && Array.isArray(s.ranks))
     .sort((a, b) => recentBest(a.ranks) - recentBest(b.ranks) || a.cc.localeCompare(b.cc) || a.kind.localeCompare(b.kind));
   return [...list, ...rest].map(s => ({ ...s, key: `${s.cc}/${s.kind}`, label: chartLabel(s.cc, s.kind) }));
 }

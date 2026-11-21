@@ -18,7 +18,20 @@ https://rss.marketingtools.apple.com/api/v2/{cc}/apps/{top-free|top-paid}/100/ap
 - The feed hangs ~35–40% of requests at random (measured 2026-11-21, same at concurrency 1, 4 and 8) and sometimes returns 500/502/504 or a non-JSON body. Normal responses take 1–3 s. So: 5 s timeout, 6 attempts, concurrency 8; a full run takes ~3–4 minutes, and the daily workflow runs fetch twice (the second pass only retries charts still missing).
 - 100 is the max; asking for more returns 500.
 
-Chart kinds in this project: `free` (top-free) and `paid` (top-paid).
+Chart kinds in this project: `free` (top-free) and `paid` (top-paid) apps from the v2 feed above, which has no games,
+and `gfree` / `gpaid` for **games** from the legacy iTunes RSS filtered to genre 6014:
+
+```
+https://itunes.apple.com/{cc}/rss/{topfreeapplications|toppaidapplications}/limit=100/genre=6014/json
+```
+
+- Response: `feed.entry[]` (a single object when there is one row) with `id.attributes["im:id"]`, `im:name.label`,
+  `im:artist.label`, `im:image[]` (last = 100 px), `category.attributes["im:id"]` = `6014`. `fetch.mjs` maps it to the v2 row shape.
+- Measured 2026-11-21: all 330 game charts (165 countries) on the first try, ~1 s each, no hangs; many have 97–99 rows.
+- For games, `g` in `apps.json` is the first subgenre id (`7001` Action … `7019` Word) from the lookup's `genreIds`;
+  the feed's plain `6014` never overwrites a subgenre.
+
+The 90% rule counts all four kinds (165 × 4 = 660 charts).
 
 ## Committed data (`data/`)
 
@@ -63,7 +76,7 @@ Chart kinds in this project: `free` (top-free) and `paid` (top-paid).
 
 - Ids to look up: every id in the merged day's charts that is not already in that day's ratings file, plus every app in `apps.json` whose genre is missing (`fillGenres` rules above).
 - `https://itunes.apple.com/lookup?country=us&id=…`, batches of 150 ids, 3.5 s between calls, at most 90 calls per run, 15 s timeout; stop after 3 failed calls (the rest is retried on the next run of the same day, or skipped).
-- From each result: `primaryGenreId` -> `g` (only when `g` is missing or `"0"`), `averageUserRating`/`userRatingCount`/`releaseDate` -> `r`/`rc`/`rd`, and `rc` into the day's ratings file. Ids not returned: `g = "0"` if missing; rating fields untouched.
+- From each result: `primaryGenreId` -> `g` (only when `g` is missing or `"0"`), `averageUserRating`/`userRatingCount`/`releaseDate` -> `r`/`rc`/`rd`, and `rc` into the day's ratings file. Ids not returned (or returned without `userRatingCount`): `g = "0"` if missing, and `r`/`rc`/`rd` are removed, so a stale US rating never outlives the app's US listing. Ids not looked up in this run (call cap, failed call) keep yesterday's values.
 - Lookup failures never fail the run.
 
 ## Built data (`site/data/`, git-ignored, written by `scripts/build.mjs`)
@@ -128,5 +141,5 @@ Definitions (all use the latest raw day `D` and calendar days before it):
 
 ## Limits we design for
 
-- 165 countries × 2 kinds = 330 requests/day. Raw day file ≈ 400–450 KB minified.
+- 165 countries × 4 kinds = 660 chart requests/day plus ~100 lookup calls. Raw day file ≈ 800–900 KB minified (≈ 300 MB/year of git history; revisit before the repo nears 1 GB).
 - GitHub repo soft limit 1 GB, Pages site 1 GB, 100 GB/month bandwidth.

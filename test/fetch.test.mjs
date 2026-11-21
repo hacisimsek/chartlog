@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, readdir, writeFile, mkdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseFeed, fetchChart, planCharts, mergeRaw, updateApps, lookupApps, lookupUrl, run } from '../scripts/fetch.mjs';
+import { feedUrl, parseFeed, fetchChart, planCharts, mergeRaw, updateApps, lookupApps, lookupUrl, run } from '../scripts/fetch.mjs';
 
 const fixture = (name) => readFileSync(new URL(`fixtures/fetch/${name}`, import.meta.url), 'utf8');
 const TR = fixture('tr-free.json');
@@ -33,7 +33,8 @@ function mockFetch(routes) {
   return { fetch, calls };
 }
 
-const base = { date: '2026-11-22', sleep: async () => {}, now: () => new Date('2026-11-22T03:00:00Z'), log: () => {}, logErr: () => {} };
+// Most run() tests cover the apps feeds only; game charts have their own tests below.
+const base = { date: '2026-11-22', kinds: ['free', 'paid'], sleep: async () => {}, now: () => new Date('2026-11-22T03:00:00Z'), log: () => {}, logErr: () => {} };
 const tmp = () => mkdtemp(join(tmpdir(), 'chartlog-fetch-'));
 const readJson = async (f) => JSON.parse(await readFile(f, 'utf8'));
 const rawPath = (dir) => join(dir, 'raw', '2026', '2026-11-22.json');
@@ -149,11 +150,13 @@ test('small storefront with 37 rows is stored', async () => {
 });
 
 test('planCharts', () => {
-  assert.deepEqual(planCharts(['tr'], null, false), ['tr/free', 'tr/paid']);
+  assert.deepEqual(planCharts(['tr'], null, false), ['tr/free', 'tr/paid', 'tr/gfree', 'tr/gpaid']);
+  assert.deepEqual(planCharts(['tr'], null, false, ['free', 'paid']), ['tr/free', 'tr/paid']);
   const existing = { charts: { tr: { free: ['1'] } }, failed: ['tr/paid', 'xx/free'] };
-  assert.deepEqual(planCharts(['tr', 'us'], existing, false), ['tr/paid', 'xx/free', 'us/free', 'us/paid']);
-  assert.deepEqual(planCharts(['tr'], existing, true), ['tr/free', 'tr/paid']);
-  assert.deepEqual(planCharts(['tr'], { charts: { tr: { free: [], paid: [] } }, failed: [] }, false).length, 0);
+  const K = ['free', 'paid'];
+  assert.deepEqual(planCharts(['tr', 'us'], existing, false, K), ['tr/paid', 'xx/free', 'us/free', 'us/paid']);
+  assert.deepEqual(planCharts(['tr'], existing, true, K), ['tr/free', 'tr/paid']);
+  assert.deepEqual(planCharts(['tr'], { charts: { tr: { free: [], paid: [] } }, failed: [] }, false, K).length, 0);
 });
 
 test('mergeRaw: successes replace, failures keep old, failed lists charts still without data', () => {
@@ -205,7 +208,7 @@ test('lookupApps: batches lookups, marks ids the lookup does not return as 0, ke
   assert.equal(none[9].g, '0');
 });
 
-test('lookupApps: rating fields, rc=0 drops r, ids not returned keep ratings', async () => {
+test('lookupApps: rating fields, rc=0 drops r, ids not returned lose stale ratings', async () => {
   const apps = { 1: { g: '6014' }, 2: { g: '6005', r: 4.2, rc: 5 }, 3: { g: '6000', r: 3, rc: 9, rd: '2019-01-01' } };
   const ratings = {};
   const { fetch } = lookupFetch(() => lookupBody([
@@ -216,7 +219,7 @@ test('lookupApps: rating fields, rc=0 drops r, ids not returned keep ratings', a
   assert.deepEqual(r, { ids: 3, found: 2, calls: 1, errors: 0 });
   assert.deepEqual(apps[1], { g: '6014', r: 4.7, rc: 1234, rd: '2023-05-18' }); // a real genre is not replaced
   assert.deepEqual(apps[2], { g: '6005', rc: 0, rd: '2024-01-02' });
-  assert.deepEqual(apps[3], { g: '6000', r: 3, rc: 9, rd: '2019-01-01' });
+  assert.deepEqual(apps[3], { g: '6000' }); // looked up, not in the US store: stale ratings dropped
   assert.deepEqual(ratings, { 1: 1234, 2: 0, 3: null }); // 3: not returned -> null, not asked again today
 });
 
@@ -321,4 +324,44 @@ test('lookupApps: chart ids the lookup does not return are stored as null and no
   assert.deepEqual(ratings, { 1: 5, 2: null });
   await lookupApps(apps, ['1', '2'], ratings, { fetch, sleep: async () => {} });
   assert.equal(urls.length, 1);
+});
+
+// Legacy iTunes RSS (game charts): https://itunes.apple.com/{cc}/rss/top…applications/limit=100/genre=6014/json
+const legacyEntry = (id, name = `Game ${id}`) => ({
+  'im:name': { label: name },
+  'im:image': [{ label: 'https://is1-ssl.mzstatic.com/a/53x53bb.png' }, { label: 'https://is1-ssl.mzstatic.com/a/100x100bb.png' }],
+  id: { label: `https://apps.apple.com/us/app/x/id${id}`, attributes: { 'im:id': String(id) } },
+  'im:artist': { label: 'Studio' },
+  category: { attributes: { 'im:id': '6014', label: 'Games' } },
+});
+const legacyFeed = (entry) => JSON.stringify({ feed: entry === undefined ? {} : { entry } });
+
+test('game charts: feedUrl and legacy parsing (array, single object, empty, bad id)', () => {
+  assert.equal(feedUrl('tr', 'gfree'), 'https://itunes.apple.com/tr/rss/topfreeapplications/limit=100/genre=6014/json');
+  assert.equal(feedUrl('tr', 'gpaid'), 'https://itunes.apple.com/tr/rss/toppaidapplications/limit=100/genre=6014/json');
+  assert.equal(feedUrl('tr', 'free'), 'https://rss.marketingtools.apple.com/api/v2/tr/apps/top-free/100/apps.json');
+  const rows = parseFeed(200, legacyFeed([legacyEntry(7), legacyEntry(8)]));
+  assert.deepEqual(rows[0], { id: '7', name: 'Game 7', artistName: 'Studio', artworkUrl100: 'https://is1-ssl.mzstatic.com/a/100x100bb.png', genres: [{ genreId: '6014' }] });
+  assert.equal(parseFeed(200, legacyFeed(legacyEntry(9))).length, 1); // one row comes as an object
+  assert.throws(() => parseFeed(200, legacyFeed(undefined)));
+  assert.throws(() => parseFeed(200, legacyFeed([{ ...legacyEntry(1), id: { attributes: { 'im:id': 'x' } } }])));
+});
+
+test('game genres: lookup stores the subgenre, the feed\'s plain 6014 does not overwrite it, ratings survive a full run', async () => {
+  const apps = {};
+  updateApps(apps, { 'us/gfree': parseFeed(200, legacyFeed([legacyEntry(7)])) }, true);
+  assert.equal(apps[7].g, '6014');
+  const fetch = async () => ({ status: 200, text: async () => JSON.stringify({ results: [{ trackId: 7, primaryGenreId: 6014, genreIds: ['6014', '7012', '6016'], userRatingCount: 40, averageUserRating: 4.44, releaseDate: '2025-02-03T00:00:00Z' }] }) });
+  await lookupApps(apps, ['7'], {}, { fetch, sleep: async () => {} });
+  assert.deepEqual(apps[7], { n: 'Game 7', a: 'Studio', i: 'https://is1-ssl.mzstatic.com/a/100x100bb.png', g: '7012', rc: 40, r: 4.4, rd: '2025-02-03' });
+  updateApps(apps, { 'us/gfree': parseFeed(200, legacyFeed([legacyEntry(7, 'Game 7 v2')])) }, true);
+  assert.deepEqual(apps[7], { n: 'Game 7 v2', a: 'Studio', i: 'https://is1-ssl.mzstatic.com/a/100x100bb.png', g: '7012', rc: 40, r: 4.4, rd: '2025-02-03' });
+});
+
+test('lookupApps: an app looked up now without a US rating loses its old rating fields', async () => {
+  const apps = { 1: { g: '6007', r: 4.6, rc: 1200, rd: '2020-01-01' }, 2: { g: '6007', r: 4, rc: 9, rd: '2021-01-01' } };
+  const fetch = async () => ({ status: 200, text: async () => JSON.stringify({ results: [{ trackId: 2, primaryGenreId: 6007 }] }) });
+  await lookupApps(apps, ['1', '2'], {}, { fetch, sleep: async () => {} });
+  assert.deepEqual(apps[1], { g: '6007' }); // not returned
+  assert.deepEqual(apps[2], { g: '6007' }); // returned without userRatingCount
 });
