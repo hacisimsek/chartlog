@@ -144,5 +144,11 @@ Definitions (all use the latest raw day `D` and calendar days before it):
 
 ## Limits we design for
 
-- 165 countries × 4 kinds = 660 chart requests/day plus ~100 lookup calls. Raw day file ≈ 800–900 KB minified (≈ 300 MB/year of git history; revisit before the repo nears 1 GB).
+- 165 countries × 4 kinds = 660 chart requests/day plus ~100 lookup calls. Raw day file ≈ 800–900 KB minified, ratings file ≈ 220 KB.
+- **Git growth (measured 2026-11-21, 30 simulated days from real files with ~4% daily id churn):** git's own zlib + delta
+  compression stores raw + ratings at ≈ 285 KB/day (raw ≈ 194, ratings ≈ 92) ≈ **100 MB/year**, about 1/4 of the file sizes.
+  Gzipping the files made the repo *larger* (322 KB/day: git can no longer delta consecutive days) and a compact
+  id-dictionary format gave no gain (308 KB/day), so files stay plain minified JSON. Deleting old files would not shrink
+  history either. Re-measure with real data after ~30 days (`git count-objects -vH`); the biggest lever left is storing
+  ratings weekly instead of daily (≈ −30%)..
 - GitHub repo soft limit 1 GB, Pages site 1 GB, 100 GB/month bandwidth.

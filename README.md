@@ -50,7 +50,7 @@ Ham veri, uygulama bilgileri ve build çıktıları [docs/DATA.md](docs/DATA.md)
 - **İndirme sayısı yok.** Apple bunu yayınlamıyor. Sadece sıra var.
 - **Google Play yok (karar, 21.11.2026).** Google Play'in resmi, herkese açık bir liste kaynağı yok. Eski `collection/topselling_*` adresleri artık listeyi vermiyor. Listeler sadece Google'ın belgesiz iç API'sinden (`/_/PlayStoreUi/data/batchexecute`) geliyor, `robots.txt` ise `Disallow: /_` ile buna otomatik erişimi yasaklıyor. Bu yüzden kazıma yapılmıyor. Google resmi bir kaynak açarsa yeniden değerlendirilir.
 - **Geçmiş, ilk toplama gününden başlar.** Apple eski listeleri vermiyor; geriye dönük veri yok.
-- **Boyut:** Ham veri günde yaklaşık 400 KB. Yılda yaklaşık 150 MB, GitHub'ın 1 GB önerilen repo sınırının altında.
+- **Boyut:** Günlük dosyalar yaklaşık 1 MB (sıralar + değerlendirme sayıları), ama git bunları kendisi sıkıştırıp ardışık günlerin farkını sakladığı için repo günde yaklaşık 285 KB, yılda yaklaşık 100 MB büyür (30 günlük simülasyonla ölçüldü). GitHub'ın önerdiği 1 GB sınırına yaklaşık 10 yıl var. Dosyaları gzip ile sıkıştırmak repoyu büyüttüğü için yapılmıyor; ayrıntı `docs/DATA.md`'de.
 - **GitHub'ın 60 gün kuralı:** Hareketsiz repolarda zamanlanmış işler 60 gün sonra durdurulur. Günlük veri commit'leri bu sayacı sıfırlar.
 
 ## Ziyaretçi sayımı (GoatCounter)
