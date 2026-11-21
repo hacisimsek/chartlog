@@ -26,16 +26,26 @@
   <button type="button" id="icon-toggle" class="plain" data-s="hideIcons" aria-pressed="false"></button>
   <button type="button" id="lang-toggle" class="plain" data-s="langSwitch" hidden></button>
 </header>
-<nav class="tabs" data-s-aria="viewsLabel">
-  <button type="button" data-view="month" data-s="month" aria-pressed="true"></button>
-  <button type="button" data-view="week" data-s="week" aria-pressed="false"></button>
-  <button type="button" data-view="quarter" data-s="quarter" aria-pressed="false"></button>
-  <button type="button" data-view="today" data-s="today" aria-pressed="false"></button>
-  <button type="button" data-view="risers" data-s="risers" aria-pressed="false"></button>
-  <button type="button" data-view="newcomers" data-s="newcomers" aria-pressed="false"></button>
-</nav>
 <main>
   <p id="stale" class="notice" hidden></p>
+  <section class="radar" aria-labelledby="radar-title">
+    <div class="radar-head">
+      <h1 id="radar-title"><span data-s="radar"></span> <span class="radar-ctx" id="radar-ctx"></span></h1>
+      <button type="button" id="radar-toggle" class="plain" aria-controls="radar-body" aria-expanded="true"></button>
+    </div>
+    <div id="radar-body">
+      <p class="lede" data-s="radarLede"></p>
+      <div id="signals" aria-busy="true"></div>
+    </div>
+  </section>
+  <nav class="tabs" data-s-aria="viewsLabel">
+    <button type="button" data-view="month" data-s="month" aria-pressed="true"></button>
+    <button type="button" data-view="week" data-s="week" aria-pressed="false"></button>
+    <button type="button" data-view="quarter" data-s="quarter" aria-pressed="false"></button>
+    <button type="button" data-view="today" data-s="today" aria-pressed="false"></button>
+    <button type="button" data-view="risers" data-s="risers" aria-pressed="false"></button>
+    <button type="button" data-view="newcomers" data-s="newcomers" aria-pressed="false"></button>
+  </nav>
   <div id="content" aria-busy="true"></div>
   <p id="status" class="sr" role="status"></p>
 </main>

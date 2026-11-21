@@ -27,9 +27,31 @@ const TR = {
   noItems: 'Bu görünümde gösterilecek uygulama yok.',
   needDays: (have, need) => `Veri birikiyor: ${have} gün var, bu görünüm için ${need} gün gerekiyor.`,
   stale: date => `Son veri ${date} tarihli; listeler güncel olmayabilir.`,
+  // radar
+  radar: 'Radar',
+  radarLede: 'Son günlerde popülerleşen ve daha iyisi yapılabilecek uygulamalar.',
+  radarHide: "Radar'ı gizle",
+  radarShow: "Radar'ı göster",
+  sigRise: 'Hızla yükselenler', sigRiseWhy: '7 gün öncesine göre en çok sıra kazananlar.',
+  sigNew: 'Yeni girenler', sigNewWhy: 'Önceki 7 günde listede olmayıp bugün girenler.',
+  sigLow: 'Popüler ama puanı düşük', sigLowWhy: "Puanı 4,0'ın altında, son 30 günde en çok gün listede kalanlar.",
+  sigGrow: 'Değerlendirmesi hızla artanlar', sigGrowWhy: 'Bugün listede olup değerlendirme sayısı oransal olarak en çok artanlar.',
+  shownOf: (n, t) => `${t} uygulamanın ${n} tanesi`,
+  sigNone: 'Bu listede şu an yok.',
+  sigNoData: 'Bu liste için 7 gün öncesinin verisi yok.',
+  places: 'sıra',
+  ratingsShort: 'değ.',
+  daysIn: d => `${d} gün listede`,
+  scatterTitle: 'Popülerlik ve puan',
+  scatterX: 'Popülerlik (30 günlük skor) →',
+  quadrant: 'Popüler, puanı düşük',
+  scatterSr: (n, q) => `${n} uygulama, ${q} tanesi popüler ve puanı 4,0'ın altında.`,
+  scatterList: 'Grafiği liste olarak göster',
+  noRating: n => `${n} uygulamanın puanı yok, grafikte gösterilmedi.`,
+  notInToday: 'Bugün listede değil',
   col: {
     rank: '#', delta: 'Δ', deltaSr: 'Dünden değişim', app: 'Uygulama', category: 'Kategori',
-    spark: '7G', sparkSr: 'Son 7 gün', countries: 'Ülke', best: 'En iyi', score: 'Puan',
+    spark: '7G', sparkSr: 'Son 7 gün', countries: 'Ülke', best: 'En iyi', score: 'Skor',
     rise: '▲', riseSr: 'Yükseliş', weekAgo: '7 gün önce', todayRank: 'Bugün', days: 'Gün', avg: 'Ort. sıra',
     chart: 'Liste', country: 'Ülke', position: 'Sıra',
     stars: '★', starsSr: 'Kullanıcı puanı (ABD)', ratings: 'Değerlendirme', growth: 'Değ. artışı',
@@ -103,6 +125,28 @@ const EN = {
   noItems: 'No apps to show in this view.',
   needDays: (have, need) => `Collecting data: ${have} ${have === 1 ? 'day' : 'days'} so far, this view needs ${need}.`,
   stale: date => `Latest data is from ${date}; charts may be out of date.`,
+  // radar
+  radar: 'Radar',
+  radarLede: 'Apps that got popular recently and could be done better.',
+  radarHide: 'Hide Radar',
+  radarShow: 'Show Radar',
+  sigRise: 'Rising fast', sigRiseWhy: 'Most places gained since 7 days ago.',
+  sigNew: 'New entries', sigNewWhy: 'In the chart today, absent the 7 days before.',
+  sigLow: 'Popular but low-rated', sigLowWhy: 'Rated below 4.0, most days in the chart over the last 30 days.',
+  sigGrow: 'Ratings growing fast', sigGrowWhy: 'In the chart today, biggest relative growth in rating count.',
+  shownOf: (n, t) => `${n} of ${t} apps`,
+  sigNone: 'None in this chart right now.',
+  sigNoData: 'No data for this chart from 7 days ago.',
+  places: 'places',
+  ratingsShort: 'ratings',
+  daysIn: d => `${d} ${d === 1 ? 'day' : 'days'} in chart`,
+  scatterTitle: 'Popularity vs rating',
+  scatterX: 'Popularity (30-day score) →',
+  quadrant: 'Popular, low-rated',
+  scatterSr: (n, q) => `${n} apps, ${q} of them popular and rated below 4.0.`,
+  scatterList: 'Show the chart as a list',
+  noRating: n => `${n} ${n === 1 ? 'app has' : 'apps have'} no rating and ${n === 1 ? 'is' : 'are'} not plotted.`,
+  notInToday: "Not in today's chart",
   col: {
     rank: '#', delta: 'Δ', deltaSr: 'Change since yesterday', app: 'App', category: 'Category',
     spark: '7D', sparkSr: 'Last 7 days', countries: 'Countries', best: 'Best', score: 'Score',
@@ -280,6 +324,7 @@ export const fmtShort = LANG === 'tr' ? d => fmtDate(d).slice(0, 5) : dayFmt({ d
 export const fmtNum = n => Number(n).toLocaleString(LOCALE);
 export const fmtAvg = n => Number(n).toLocaleString(LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 export const fmtCompact = n => Number(n).toLocaleString(LOCALE, { notation: 'compact', maximumFractionDigits: 1 });
+export const fmtPct = n => Number(n).toLocaleString(LOCALE, { style: 'percent', maximumFractionDigits: 0 });
 export const signed = (n, f = fmtNum) => (n > 0 ? '+' : '') + f(n);
 export const compareNames = (a, b) => a.localeCompare(b, LANG);
 
